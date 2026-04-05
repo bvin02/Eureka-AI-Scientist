@@ -1,32 +1,63 @@
 # Eureka Build Status
 
-## Phases
-- [ ] 0. Repo scaffold and architecture
-- [ ] 1. Domain model
-- [ ] 2. Workflow engine
-- [ ] 3. Research planner
-- [ ] 4. Hypothesis engine
-- [ ] 5. Source adapters
-- [ ] 6. Dataset profiling
-- [ ] 7. Merge planner
-- [ ] 8. Analysis dataset builder
-- [ ] 9. Test plan generator
-- [ ] 10. Analysis engine
-- [ ] 11. Notebook system
-- [ ] 12. User steering
-- [ ] 13. Frontend workspace
-- [ ] 14. Charts/results
-- [ ] 15. Export/report
-- [ ] 16. Demo path
-- [ ] 17. Reliability hardening
-- [ ] 18. QA
-- [ ] 19. Final polish
-
 ## Current phase
-None
+0. Architecture and scaffold
+Status: in progress
+
+## Architecture baseline
+- Backend API: FastAPI
+- Workflow engine: explicit persisted Python state machine
+- Background execution: worker process using shared orchestration code
+- LLM interface: centralized OpenAI Responses API client
+- Primary model: GPT-5.4
+- Schema layer: Pydantic v2
+- Persistence: SQLAlchemy/SQLModel
+- Analytical data layer: DuckDB + Parquet artifacts
+- Analysis stack: pandas + statsmodels + scipy
+- Frontend: React + TypeScript research workspace
+
+## Repo structure baseline
+```text
+eureka/
+  apps/
+    api/
+    worker/
+    web/
+  domain/
+  orchestration/
+  llm/
+  data/
+  analysis/
+  notebook/
+  infra/
+  tests/
+```
+
+## Phase plan
+- [ ] 0. Architecture and scaffold
+- [ ] 1. Domain model and persistence contracts
+- [ ] 2. OpenAI gateway and prompt registry
+- [ ] 3. Workflow engine and stage persistence
+- [ ] 4. Source adapters and dataset profiling
+- [ ] 5. Merge planning and analysis dataset builder
+- [ ] 6. Analysis runtime and result artifacts
+- [ ] 7. Notebook system and user steering APIs
+- [ ] 8. Frontend workspace and visualization
+- [ ] 9. Export, demo path, reliability hardening, QA, and final polish
+
+## Phase 0 goals
+- Lock architecture decisions
+- Lock canonical repo structure
+- Establish project rules and build tracker
+- Scaffold backend, worker, web, and shared package layout
+- Add dependency and local dev baseline
 
 ## Open issues
-- None yet
+- Plaintext API keys are currently checked into `api/openai.txt` and `api/fred.txt`; rotate and move to environment-based secret management before any shared use.
 
 ## Decisions
-- None yet
+- Eureka is a workflow product, not a chat wrapper.
+- The notebook is a first-class system of record for execution history, provenance, and branching.
+- All important model-mediated outputs must be schema-validated typed payloads.
+- Human approvals are required at major control points such as merge plans and test plans.
+- Reproducibility and inspectability take priority over breadth.
