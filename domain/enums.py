@@ -130,6 +130,15 @@ class ProvenanceSourceType(StrEnum):
     ANALYSIS_ENGINE = "analysis_engine"
     FILING = "filing"
     ARTICLE = "article"
+    PAPER = "paper"
+    PUBLIC_RESEARCH = "public_research"
+
+
+class EvidenceStance(StrEnum):
+    SUPPORTS = "supports"
+    WEAKLY_SUPPORTS = "weakly_supports"
+    CONTRADICTS = "contradicts"
+    ADJACENT = "adjacent"
 
 
 class UserDecisionType(StrEnum):

@@ -10,6 +10,7 @@ from domain.enums import (
     AnalysisType,
     AnalysisDatasetKind,
     ApprovalStatus,
+    EvidenceStance,
     ArtifactKind,
     BranchStatus,
     EntityKind,
@@ -282,10 +283,15 @@ class EvidenceSource(ImmutableRecord):
     provider: str
     source_type: ProvenanceSourceType
     title: str
+    source: str
     url: str | None = None
     citation: str | None = None
     published_at: datetime | None = None
     summary: str
+    methodology_summary: str | None = None
+    data_used: list[str] = Field(default_factory=list)
+    relevance_to_hypothesis: str
+    evidence_stance: EvidenceStance = EvidenceStance.ADJACENT
     extracted_claims: list[str] = Field(default_factory=list)
     artifact_ref_ids: list[UUID] = Field(default_factory=list)
     assumptions: list[AssumptionRecord] = Field(default_factory=list)

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pydantic import Field
 
-from domain.enums import AnalysisType, MergeJoinType, TimeAlignmentPolicy
+from domain.enums import AnalysisType, EvidenceStance, MergeJoinType, TimeAlignmentPolicy
 from domain.models import CaveatRecord, ColumnProfile, DomainModel, TransformSpec
 
 
@@ -54,7 +54,13 @@ class HypothesisProposalSet(DomainModel):
 class EvidenceItemProposal(DomainModel):
     provider: str
     title: str
-    summary: str
+    source: str
+    date: str | None = None
+    short_claim_summary: str
+    methodology_summary: str | None = None
+    data_used: list[str] = Field(default_factory=list)
+    relevance_to_hypothesis: str
+    evidence_stance: EvidenceStance = EvidenceStance.ADJACENT
     citation: str | None = None
     extracted_claims: list[str] = Field(default_factory=list)
 

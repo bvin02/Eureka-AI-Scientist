@@ -5,6 +5,7 @@ class PromptRegistry:
     def __init__(self, root: Path | None = None) -> None:
         self.root = root or Path.cwd()
         self._prompts = {
+            "evidence_retrieval": Path("llm/prompts/evidence_retrieval.md"),
             "hypothesis_engine": Path("llm/prompts/hypothesis_engine.md"),
             "master": Path("prompts/prompt1_master.md"),
             "scaffold": Path("prompts/prompt2_scaffold.md"),

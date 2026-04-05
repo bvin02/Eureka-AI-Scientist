@@ -5,6 +5,7 @@ from typing import Protocol
 from domain.enums import AnalysisType, MergeJoinType, TimeAlignmentPolicy
 from llm.client import OpenAIResponsesGateway
 from llm.contracts import PromptRequest
+from llm.evidence_retrieval import EvidenceInput, EvidenceRetriever
 from llm.hypothesis_engine import HypothesisEngine
 from llm.research_planner import ResearchPlanner, planner_output_to_research_question_plan
 from orchestration.contracts import (
@@ -43,9 +44,11 @@ class DeterministicWorkflowModelAdapter:
         self,
         planner: ResearchPlanner | None = None,
         hypothesis_engine: HypothesisEngine | None = None,
+        evidence_retriever: EvidenceRetriever | None = None,
     ) -> None:
         self.planner = planner or ResearchPlanner()
         self.hypothesis_engine = hypothesis_engine or HypothesisEngine()
+        self.evidence_retriever = evidence_retriever or EvidenceRetriever()
 
     async def parse_research_question(self, raw_prompt: str) -> ResearchQuestionPlan:
         planner_output = self.planner.fallback.plan(raw_prompt)
@@ -63,16 +66,8 @@ class DeterministicWorkflowModelAdapter:
         return await self.hypothesis_engine.generate(research_question)
 
     async def retrieve_evidence(self, canonical_question: str) -> EvidenceSummarySet:
-        return EvidenceSummarySet(
-            evidence_items=[
-                EvidenceItemProposal(
-                    provider="internal_summary",
-                    title="Macro mechanism summary",
-                    summary=f"Evidence retrieval placeholder for: {canonical_question}",
-                    citation="Deterministic fallback summary",
-                    extracted_claims=["Falling real yields often support long-duration growth assets."],
-                )
-            ]
+        return await self.evidence_retriever.retrieve(
+            EvidenceInput(research_question=canonical_question)
         )
 
     async def discover_datasets(self, canonical_question: str) -> DatasetDiscoverySet:
@@ -200,6 +195,7 @@ class ResponsesWorkflowModelAdapter:
         self.fallback = fallback or DeterministicWorkflowModelAdapter()
         self.planner = ResearchPlanner(gateway=gateway)
         self.hypothesis_engine = HypothesisEngine(gateway=gateway)
+        self.evidence_retriever = EvidenceRetriever(gateway=gateway)
 
     async def _generate(self, prompt_name: str, system_prompt: str, user_prompt: str, schema):
         if self.gateway.client is None:
@@ -227,13 +223,9 @@ class ResponsesWorkflowModelAdapter:
         return await self.hypothesis_engine.generate(research_question)
 
     async def retrieve_evidence(self, canonical_question: str) -> EvidenceSummarySet:
-        result = await self._generate(
-            "retrieve_evidence",
-            "Generate structured evidence summaries for a quant research hypothesis.",
-            canonical_question,
-            EvidenceSummarySet,
+        return await self.evidence_retriever.retrieve(
+            EvidenceInput(research_question=canonical_question)
         )
-        return result or await self.fallback.retrieve_evidence(canonical_question)
 
     async def discover_datasets(self, canonical_question: str) -> DatasetDiscoverySet:
         result = await self._generate(

@@ -844,10 +844,16 @@ class WorkflowEngine:
                 branch_id=branch.id,
                 stage_run_id=stage_run.id,
                 provider=proposal.provider,
-                source_type=ProvenanceSourceType.ARTICLE,
+                source_type=ProvenanceSourceType.PUBLIC_RESEARCH,
                 title=proposal.title,
+                source=proposal.source,
                 citation=proposal.citation,
-                summary=proposal.summary,
+                published_at=datetime.fromisoformat(f"{proposal.date}T00:00:00+00:00") if proposal.date else None,
+                summary=proposal.short_claim_summary,
+                methodology_summary=proposal.methodology_summary,
+                data_used=proposal.data_used,
+                relevance_to_hypothesis=proposal.relevance_to_hypothesis,
+                evidence_stance=proposal.evidence_stance,
                 extracted_claims=proposal.extracted_claims,
             )
             self.store.put(evidence)
