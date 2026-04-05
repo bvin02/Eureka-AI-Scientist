@@ -1,7 +1,7 @@
 # Eureka Build Status
 
 ## Current phase
-1. Domain model and persistence contracts
+2. OpenAI gateway and prompt registry
 Status: ready to begin
 
 ## Architecture baseline
@@ -41,7 +41,7 @@ eureka/
 
 ## Phase plan
 - [x] 0. Architecture and scaffold
-- [ ] 1. Domain model and persistence contracts
+- [x] 1. Domain model and persistence contracts
 - [ ] 2. OpenAI gateway and prompt registry
 - [ ] 3. Workflow engine and stage persistence
 - [ ] 4. Source adapters and dataset profiling
@@ -50,6 +50,12 @@ eureka/
 - [ ] 7. Notebook system and user steering APIs
 - [ ] 8. Frontend workspace and visualization
 - [ ] 9. Export, demo path, reliability hardening, QA, and final polish
+
+## Phase 1 completed
+- Canonical domain entities implemented for investigations, questions, hypotheses, evidence, datasets, merges, tests, results, notebook lineage, provenance, decisions, stage runs, approvals, and artifact references
+- Domain invariants added for invalidation, approvals, notebook anchors, and stage-run terminal states
+- Canonical domain model documentation added with purpose, lifecycle, persistence strategy, and UI/notebook relations for each entity
+- Workflow and stage naming aligned to the tightened architecture baseline
 
 ## Phase 0 completed
 - Architecture decisions locked in `PROJECT_RULES.md`
@@ -60,7 +66,6 @@ eureka/
 
 ## Open issues
 - Plaintext API keys are currently checked into `api/openai.txt` and `api/fred.txt`; rotate and move to environment-based secret management before any shared use.
-- Domain and persistence implementation still need concrete `StageRun`, `ApprovalCheckpoint`, and artifact-link models beyond the current scaffold summaries.
 
 ## Decisions
 - Eureka is a workflow product, not a chat wrapper.
