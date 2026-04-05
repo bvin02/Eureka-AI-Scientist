@@ -17,17 +17,20 @@ class WorkflowDefinition:
                 label="Await User Merge Approval",
                 requires_approval=True,
             ),
-            StageDescriptor(stage=WorkflowStage.BUILD_ANALYSIS_DATASET, label="Build Analysis Dataset"),
+            StageDescriptor(stage=WorkflowStage.BUILD_CANONICAL_DATASET, label="Build Canonical Dataset"),
             StageDescriptor(stage=WorkflowStage.PROPOSE_TEST_PLAN, label="Propose Test Plan"),
             StageDescriptor(
                 stage=WorkflowStage.AWAIT_USER_TEST_APPROVAL,
                 label="Await User Test Approval",
                 requires_approval=True,
             ),
+            StageDescriptor(
+                stage=WorkflowStage.MATERIALIZE_ANALYSIS_DATASET,
+                label="Materialize Analysis Dataset",
+            ),
             StageDescriptor(stage=WorkflowStage.EXECUTE_ANALYSIS, label="Execute Analysis"),
             StageDescriptor(stage=WorkflowStage.SUMMARIZE_RESULTS, label="Summarize Results"),
             StageDescriptor(stage=WorkflowStage.PROPOSE_NEXT_STEPS, label="Propose Next Steps"),
-            StageDescriptor(stage=WorkflowStage.NOTEBOOK_COMMIT, label="Notebook Commit"),
         ]
 
     def ordered_stages(self) -> list[StageDescriptor]:

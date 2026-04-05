@@ -30,6 +30,17 @@ class StageDescriptor(BaseModel):
     notebook_emission_required: bool = True
 
 
+class StageRunSummary(BaseModel):
+    id: UUID = Field(default_factory=uuid4)
+    investigation_id: UUID
+    branch_id: UUID
+    stage: WorkflowStage
+    attempt: int = 1
+    status: str
+    invalidated_by_stage: WorkflowStage | None = None
+    created_at: datetime = Field(default_factory=utc_now)
+
+
 class AnalysisMethodDescriptor(BaseModel):
     key: str
     label: str

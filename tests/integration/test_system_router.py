@@ -19,4 +19,4 @@ def test_workflow_stage_endpoint() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload[0]["stage"] == "intake"
-    assert payload[-1]["stage"] == "notebook_commit"
+    assert payload[-1]["stage"] == "propose_next_steps"

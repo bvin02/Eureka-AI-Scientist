@@ -18,3 +18,8 @@ def test_approval_stages_are_explicit() -> None:
         WorkflowStage.AWAIT_USER_MERGE_APPROVAL,
         WorkflowStage.AWAIT_USER_TEST_APPROVAL,
     ]
+
+
+def test_workflow_ends_with_next_steps_not_notebook_commit() -> None:
+    workflow = WorkflowDefinition()
+    assert workflow.ordered_stages()[-1].stage == WorkflowStage.PROPOSE_NEXT_STEPS

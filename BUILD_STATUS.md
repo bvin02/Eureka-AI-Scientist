@@ -16,6 +16,12 @@ Status: ready to begin
 - Analysis stack: pandas + statsmodels + scipy
 - Frontend: React + TypeScript research workspace
 
+## Architecture tightening applied
+- Replaced the cyclic `build_analysis_dataset -> propose_test_plan` design with `build_canonical_dataset -> propose_test_plan -> materialize_analysis_dataset`.
+- Removed `notebook_commit` as a standalone workflow stage; notebook persistence is an event emitted by every stage.
+- Added explicit architecture requirements for immutable stage runs, approval checkpoints, and artifact references.
+- Tightened review prompts to look for branch invalidation, race conditions, and notebook/orchestration coupling.
+
 ## Repo structure baseline
 ```text
 eureka/
@@ -54,6 +60,7 @@ eureka/
 
 ## Open issues
 - Plaintext API keys are currently checked into `api/openai.txt` and `api/fred.txt`; rotate and move to environment-based secret management before any shared use.
+- Domain and persistence implementation still need concrete `StageRun`, `ApprovalCheckpoint`, and artifact-link models beyond the current scaffold summaries.
 
 ## Decisions
 - Eureka is a workflow product, not a chat wrapper.
@@ -61,3 +68,5 @@ eureka/
 - All important model-mediated outputs must be schema-validated typed payloads.
 - Human approvals are required at major control points such as merge plans and test plans.
 - Reproducibility and inspectability take priority over breadth.
+- The canonical dataset is built before test planning; test-specific dataset materialization happens only after test approval.
+- Notebook entries are append-only stage events, not a separate final workflow stage.

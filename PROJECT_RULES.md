@@ -85,13 +85,13 @@ Canonical stages:
 6. profile_datasets
 7. propose_merge_plan
 8. await_user_merge_approval
-9. build_analysis_dataset
+9. build_canonical_dataset
 10. propose_test_plan
 11. await_user_test_approval
-12. execute_analysis
-13. summarize_results
-14. propose_next_steps
-15. notebook_commit
+12. materialize_analysis_dataset
+13. execute_analysis
+14. summarize_results
+15. propose_next_steps
 
 Rules:
 - every stage emits notebook entries
@@ -100,6 +100,9 @@ Rules:
 - downstream recomputation is scoped to affected stages only
 - failed stages produce visible recovery options
 - all important state is reproducible from persisted notebook and artifact state
+- notebook persistence is event-driven per stage; there is no separate terminal notebook commit stage
+- stage outputs are immutable per attempt; retries and forks create new stage-run records rather than mutating prior outputs
+- approvals are explicit persisted checkpoints that downstream stages must reference by ID
 
 ## Required v1 capabilities
 - intake natural language research prompts
