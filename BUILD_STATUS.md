@@ -1,8 +1,8 @@
 # Eureka Build Status
 
 ## Current phase
-0. Architecture and scaffold
-Status: in progress
+1. Domain model and persistence contracts
+Status: ready to begin
 
 ## Architecture baseline
 - Backend API: FastAPI
@@ -34,7 +34,7 @@ eureka/
 ```
 
 ## Phase plan
-- [ ] 0. Architecture and scaffold
+- [x] 0. Architecture and scaffold
 - [ ] 1. Domain model and persistence contracts
 - [ ] 2. OpenAI gateway and prompt registry
 - [ ] 3. Workflow engine and stage persistence
@@ -45,12 +45,12 @@ eureka/
 - [ ] 8. Frontend workspace and visualization
 - [ ] 9. Export, demo path, reliability hardening, QA, and final polish
 
-## Phase 0 goals
-- Lock architecture decisions
-- Lock canonical repo structure
-- Establish project rules and build tracker
-- Scaffold backend, worker, web, and shared package layout
-- Add dependency and local dev baseline
+## Phase 0 completed
+- Architecture decisions locked in `PROJECT_RULES.md`
+- Canonical repo structure created
+- Backend API, worker, web shell, and shared Python packages scaffolded
+- Dependency baseline and developer commands added
+- Smoke tests added for workflow definition and API shell
 
 ## Open issues
 - Plaintext API keys are currently checked into `api/openai.txt` and `api/fred.txt`; rotate and move to environment-based secret management before any shared use.
