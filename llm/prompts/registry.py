@@ -7,6 +7,7 @@ class PromptRegistry:
         self._prompts = {
             "master": Path("prompts/prompt1_master.md"),
             "scaffold": Path("prompts/prompt2_scaffold.md"),
+            "research_planner": Path("llm/prompts/research_planner.md"),
         }
 
     def list_prompts(self) -> list[str]:

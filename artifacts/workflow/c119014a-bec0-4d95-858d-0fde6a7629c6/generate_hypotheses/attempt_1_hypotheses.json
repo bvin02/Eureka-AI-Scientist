@@ -1,0 +1,44 @@
+{
+  "hypotheses": [
+    {
+      "expected_direction": "positive",
+      "explanatory_variables": [
+        "real yields",
+        "inflation"
+      ],
+      "falsifiers": [
+        "no relationship in forward returns",
+        "unstable across regimes"
+      ],
+      "label": "Primary thesis",
+      "mechanism": "Macro and market variables transmit through rates and earnings expectations.",
+      "priority_score": 0.9,
+      "schema_version": 1,
+      "target_assets": [
+        "SOXX",
+        "XLK"
+      ],
+      "thesis": "Need a merge plan."
+    },
+    {
+      "expected_direction": "negative",
+      "explanatory_variables": [
+        "inflation surprises",
+        "yield changes"
+      ],
+      "falsifiers": [
+        "growth outperforms despite falling yields"
+      ],
+      "label": "Defensive counterfactual",
+      "mechanism": "Risk-off rotation dominates macro easing.",
+      "priority_score": 0.6,
+      "schema_version": 1,
+      "target_assets": [
+        "XLP",
+        "XLU"
+      ],
+      "thesis": "If the signal is weak, defensives should absorb flow instead of growth."
+    }
+  ],
+  "schema_version": 1
+}

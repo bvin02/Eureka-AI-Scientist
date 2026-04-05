@@ -1,0 +1,26 @@
+{
+  "ambiguity_notes": [
+    "Daily market data and slower macro releases require explicit lag handling."
+  ],
+  "confidence": 0.84,
+  "join_type": "asof",
+  "lag_assumption": "Macro series are aligned to first tradable date after release availability.",
+  "mappings": [
+    {
+      "confidence": 0.95,
+      "left_column": "date",
+      "notes": "Join DFII10 to CPILFESL on date with lag-aware alignment.",
+      "right_column": "date",
+      "schema_version": 1,
+      "semantic_role": "time_key",
+      "transforms": []
+    }
+  ],
+  "output_name": "canonical_macro_market_dataset",
+  "schema_version": 1,
+  "time_alignment_policy": "publication_lag",
+  "validation_checks": [
+    "no_lookahead",
+    "coverage_overlap"
+  ]
+}

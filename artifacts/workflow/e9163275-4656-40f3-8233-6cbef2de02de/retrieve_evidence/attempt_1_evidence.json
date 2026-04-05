@@ -1,0 +1,15 @@
+{
+  "evidence_items": [
+    {
+      "citation": "Deterministic fallback summary",
+      "extracted_claims": [
+        "Falling real yields often support long-duration growth assets."
+      ],
+      "provider": "internal_summary",
+      "schema_version": 1,
+      "summary": "Evidence retrieval placeholder for: Investigate whether need a merge plan.",
+      "title": "Macro mechanism summary"
+    }
+  ],
+  "schema_version": 1
+}

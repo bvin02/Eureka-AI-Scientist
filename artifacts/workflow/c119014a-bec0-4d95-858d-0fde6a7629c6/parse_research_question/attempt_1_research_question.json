@@ -1,0 +1,17 @@
+{
+  "benchmark": "SPY",
+  "canonical_question": "Need a merge plan.",
+  "caveats": [],
+  "frequency": "monthly",
+  "horizon": "3-12 months",
+  "market_universe": [
+    "US equities",
+    "macro"
+  ],
+  "schema_version": 1,
+  "success_criteria": [
+    "visible relationship",
+    "testable dataset coverage"
+  ],
+  "unit_of_analysis": "time series"
+}

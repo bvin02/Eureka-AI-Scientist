@@ -1,0 +1,22 @@
+{
+  "benchmark": "SPY",
+  "canonical_question": "Investigate whether need a merge plan.",
+  "caveats": [
+    {
+      "created_at": "2026-04-05T08:51:51.384937Z",
+      "detail": "Correlation may reflect broader macro regime shifts rather than a clean causal effect.",
+      "id": "8174ff8b-c2c6-4a7e-a48d-c24e4e06dd6c",
+      "label": "planner_caveat",
+      "schema_version": 1,
+      "severity": "warning"
+    }
+  ],
+  "frequency": "monthly",
+  "horizon": "1-6 months",
+  "market_universe": [],
+  "schema_version": 1,
+  "success_criteria": [
+    "Use a lag-aware monthly core specification with regression and rolling/regime diagnostics."
+  ],
+  "unit_of_analysis": "time series"
+}

@@ -177,7 +177,9 @@ class ArchitectureDecision(DomainModel):
 class StageDescriptor(DomainModel):
     stage: WorkflowStage
     label: str
+    depends_on: list[WorkflowStage] = Field(default_factory=list)
     requires_approval: bool = False
+    model_mediated: bool = False
     notebook_emission_required: bool = True
 
 
@@ -513,6 +515,8 @@ class StageRun(IdentifiedRecord):
     started_at: datetime = Field(default_factory=utc_now)
     completed_at: datetime | None = None
     lease_expires_at: datetime | None = None
+    failure_message: str | None = None
+    recovery_options: list[str] = Field(default_factory=list)
     output_reproducibility: ReproducibilityMetadata = Field(default_factory=ReproducibilityMetadata)
     invalidation: InvalidationMetadata = Field(default_factory=InvalidationMetadata)
 

@@ -1,7 +1,7 @@
 # Eureka Build Status
 
 ## Current phase
-2. OpenAI gateway and prompt registry
+4. Source adapters and dataset profiling
 Status: ready to begin
 
 ## Architecture baseline
@@ -42,14 +42,25 @@ eureka/
 ## Phase plan
 - [x] 0. Architecture and scaffold
 - [x] 1. Domain model and persistence contracts
-- [ ] 2. OpenAI gateway and prompt registry
-- [ ] 3. Workflow engine and stage persistence
+- [x] 2. OpenAI gateway and prompt registry
+- [x] 3. Workflow engine and stage persistence
 - [ ] 4. Source adapters and dataset profiling
 - [ ] 5. Merge planning and analysis dataset builder
 - [ ] 6. Analysis runtime and result artifacts
 - [ ] 7. Notebook system and user steering APIs
 - [ ] 8. Frontend workspace and visualization
 - [ ] 9. Export, demo path, reliability hardening, QA, and final polish
+
+## Phase 3 completed
+- Explicit workflow state machine implemented with dependency-aware stage descriptors
+- Serializable workflow snapshot and resumable runtime state implemented
+- Immutable stage runs now carry attempt numbers, fingerprints, warnings, provenance, notebook entries, and artifact references
+- Approval checkpoints, branch forking, downstream invalidation, retry/failure semantics, and per-stage notebook writes implemented
+- Deterministic model-adapter boundary added so model-mediated stages can use Responses API while orchestration stays inspectable
+
+## Phase 2 completed
+- Centralized model-stage adapter boundary now routes structured stage generation through one orchestrator-facing interface
+- Responses-backed adapter and deterministic fallback adapter both implement the same typed contracts
 
 ## Phase 1 completed
 - Canonical domain entities implemented for investigations, questions, hypotheses, evidence, datasets, merges, tests, results, notebook lineage, provenance, decisions, stage runs, approvals, and artifact references

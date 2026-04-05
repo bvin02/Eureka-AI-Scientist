@@ -1,0 +1,42 @@
+{
+  "analyses": [
+    {
+      "analysis_type": "correlation_summary",
+      "dependent_variable": null,
+      "independent_variables": [],
+      "objective": "Inspect relationships and basic stability.",
+      "parameters": {},
+      "schema_version": 1,
+      "title": "Correlation and summary diagnostics"
+    },
+    {
+      "analysis_type": "linear_regression",
+      "dependent_variable": "forward_return",
+      "independent_variables": [
+        "real_yield_change",
+        "core_cpi_change"
+      ],
+      "objective": "Estimate directional sensitivity of forward returns.",
+      "parameters": {},
+      "schema_version": 1,
+      "title": "Linear regression"
+    },
+    {
+      "analysis_type": "rolling_regression",
+      "dependent_variable": "forward_return",
+      "independent_variables": [
+        "real_yield_change"
+      ],
+      "objective": "Check whether sensitivity is regime-stable.",
+      "parameters": {
+        "window": 24
+      },
+      "schema_version": 1,
+      "title": "Rolling regression"
+    }
+  ],
+  "caveats": [],
+  "objective": "Evaluate whether the research thesis is supported: Investigate semis versus defensives.",
+  "schema_version": 1,
+  "title": "Base macro-market test plan"
+}

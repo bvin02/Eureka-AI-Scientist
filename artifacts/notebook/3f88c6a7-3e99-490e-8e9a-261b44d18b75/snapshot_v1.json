@@ -1,0 +1,243 @@
+{
+  "analysis_datasets": {},
+  "analysis_runs": {},
+  "approval_checkpoints": {},
+  "artifact_refs": {
+    "21caa66b-3d1f-49ca-a000-fd49881ce81c": {
+      "artifact_kind": "model_output",
+      "artifact_version": 1,
+      "branch_id": "3f88c6a7-3e99-490e-8e9a-261b44d18b75",
+      "byte_size": 67,
+      "checksum_sha256": "400fc06afbedb2f13e03f5ce3cb72e154539d24efc9e528a806df31685973b90",
+      "created_at": "2026-04-05T08:43:45.056151Z",
+      "id": "21caa66b-3d1f-49ca-a000-fd49881ce81c",
+      "investigation_id": "b9c02e31-3e31-4f57-ad26-2cfc44a0623d",
+      "metadata": {},
+      "mime_type": "application/json",
+      "parent_artifact_ref_id": null,
+      "role": "intake_prompt",
+      "schema_version": 1,
+      "stage_run_id": "dda657a1-db07-4d08-a445-166dea222871",
+      "storage_backend": "local",
+      "uri": "artifacts/workflow/3f88c6a7-3e99-490e-8e9a-261b44d18b75/intake/attempt_1_intake_prompt.json"
+    }
+  },
+  "branches": {
+    "3f88c6a7-3e99-490e-8e9a-261b44d18b75": {
+      "archived_at": null,
+      "created_at": "2026-04-05T08:43:45.053920Z",
+      "fork_point_notebook_version": null,
+      "forked_from_notebook_entry_id": null,
+      "forked_from_stage_run_id": null,
+      "head_notebook_entry_id": "09d75e94-3635-427f-a865-35080478759f",
+      "head_notebook_version": 1,
+      "head_stage_run_id": null,
+      "id": "3f88c6a7-3e99-490e-8e9a-261b44d18b75",
+      "investigation_id": "b9c02e31-3e31-4f57-ad26-2cfc44a0623d",
+      "lineage_branch_ids": [],
+      "lineage_depth": 0,
+      "name": "main",
+      "parent_branch_id": null,
+      "schema_version": 1,
+      "status": "active",
+      "updated_at": "2026-04-05T08:43:45.056312Z"
+    }
+  },
+  "created_at": "2026-04-05T08:43:45.052918Z",
+  "dataset_profiles": {},
+  "dataset_sources": {},
+  "evidence_sources": {},
+  "hypotheses": {},
+  "investigations": {
+    "b9c02e31-3e31-4f57-ad26-2cfc44a0623d": {
+      "assumptions": [],
+      "caveats": [],
+      "created_at": "2026-04-05T08:43:45.053891Z",
+      "current_branch_id": "3f88c6a7-3e99-490e-8e9a-261b44d18b75",
+      "head_stage_run_id": null,
+      "id": "b9c02e31-3e31-4f57-ad26-2cfc44a0623d",
+      "notebook_version": 0,
+      "provenance_ids": [],
+      "raw_prompt": "Need a merge plan.",
+      "reproducibility": {
+        "code_version": null,
+        "config_fingerprint": null,
+        "dependency_versions": {},
+        "deterministic": true,
+        "environment": null,
+        "executor_name": null,
+        "input_fingerprint": null,
+        "model_name": null,
+        "output_fingerprint": null,
+        "prompt_name": null,
+        "prompt_version": null,
+        "random_seed": null,
+        "schema_version": 1,
+        "schema_version_label": null,
+        "upstream_artifact_checksums": {},
+        "workflow_version": null
+      },
+      "root_branch_id": "3f88c6a7-3e99-490e-8e9a-261b44d18b75",
+      "schema_version": 1,
+      "status": "active",
+      "title": "Failure demo",
+      "updated_at": "2026-04-05T08:43:45.053893Z",
+      "warning_ids": []
+    }
+  },
+  "merge_plans": {},
+  "notebook_entries": {
+    "09d75e94-3635-427f-a865-35080478759f": {
+      "approval_checkpoint_id": null,
+      "artifact_ref_ids": [
+        "21caa66b-3d1f-49ca-a000-fd49881ce81c"
+      ],
+      "branch_id": "3f88c6a7-3e99-490e-8e9a-261b44d18b75",
+      "created_at": "2026-04-05T08:43:45.056279Z",
+      "id": "09d75e94-3635-427f-a865-35080478759f",
+      "investigation_id": "b9c02e31-3e31-4f57-ad26-2cfc44a0623d",
+      "kind": "stage",
+      "notebook_state_artifact_ref_id": null,
+      "notebook_version": 1,
+      "previous_entry_id": null,
+      "provenance_ids": [
+        "5646c0b0-dcb4-4180-93b3-47a83e8d1735"
+      ],
+      "related_refs": [
+        {
+          "entity_id": "b9c02e31-3e31-4f57-ad26-2cfc44a0623d",
+          "entity_type": "investigation",
+          "schema_version": 1
+        }
+      ],
+      "schema_version": 1,
+      "stage_run_id": "dda657a1-db07-4d08-a445-166dea222871",
+      "summary": "Captured the initial research prompt and created the root workflow context.",
+      "title": "Investigation Intake",
+      "user_decision_id": null,
+      "warning_ids": [
+        "f1c4f818-b9d0-4475-8854-f8af0df177be"
+      ]
+    }
+  },
+  "provenance_records": {
+    "5646c0b0-dcb4-4180-93b3-47a83e8d1735": {
+      "branch_id": "3f88c6a7-3e99-490e-8e9a-261b44d18b75",
+      "citation_text": null,
+      "content_fingerprint": null,
+      "created_at": "2026-04-05T08:43:45.056210Z",
+      "external_reference": null,
+      "id": "5646c0b0-dcb4-4180-93b3-47a83e8d1735",
+      "input_fingerprint": "704afeeee0fe9ed56ad5b2543ff93955423fdad92624cf4411e757bc3d653d54",
+      "investigation_id": "b9c02e31-3e31-4f57-ad26-2cfc44a0623d",
+      "model_name": null,
+      "output_fingerprint": null,
+      "owner_ref": null,
+      "prompt_name": null,
+      "prompt_version": null,
+      "recorded_at": "2026-04-05T08:43:45.056217Z",
+      "schema_version": 1,
+      "source_artifact_ref_id": null,
+      "source_label": "user_prompt",
+      "source_type": "user",
+      "source_uri": null,
+      "stage_run_id": "dda657a1-db07-4d08-a445-166dea222871",
+      "subject_ref": {
+        "entity_id": "dda657a1-db07-4d08-a445-166dea222871",
+        "entity_type": "stage_run",
+        "schema_version": 1
+      },
+      "tool_calls": []
+    }
+  },
+  "research_questions": {},
+  "result_artifacts": {},
+  "schema_version": 1,
+  "stage_runs": {
+    "dda657a1-db07-4d08-a445-166dea222871": {
+      "approval_checkpoint_id": null,
+      "artifact_ref_ids": [
+        "21caa66b-3d1f-49ca-a000-fd49881ce81c"
+      ],
+      "attempt": 1,
+      "branch_id": "3f88c6a7-3e99-490e-8e9a-261b44d18b75",
+      "completed_at": null,
+      "failure_message": null,
+      "id": "dda657a1-db07-4d08-a445-166dea222871",
+      "input_refs": [],
+      "invalidation": {
+        "invalidated_at": null,
+        "invalidated_by_stage_run_id": null,
+        "invalidated_entity_refs": [],
+        "invalidation_reason": null,
+        "is_invalidated": false,
+        "schema_version": 1
+      },
+      "investigation_id": "b9c02e31-3e31-4f57-ad26-2cfc44a0623d",
+      "lease_expires_at": null,
+      "notebook_entry_ids": [],
+      "output_refs": [
+        {
+          "entity_id": "b9c02e31-3e31-4f57-ad26-2cfc44a0623d",
+          "entity_type": "investigation",
+          "schema_version": 1
+        }
+      ],
+      "output_reproducibility": {
+        "code_version": null,
+        "config_fingerprint": null,
+        "dependency_versions": {},
+        "deterministic": true,
+        "environment": "development",
+        "executor_name": "workflow_engine",
+        "input_fingerprint": "704afeeee0fe9ed56ad5b2543ff93955423fdad92624cf4411e757bc3d653d54",
+        "model_name": null,
+        "output_fingerprint": null,
+        "prompt_name": null,
+        "prompt_version": null,
+        "random_seed": null,
+        "schema_version": 1,
+        "schema_version_label": null,
+        "upstream_artifact_checksums": {},
+        "workflow_version": "1.0"
+      },
+      "provenance_ids": [
+        "5646c0b0-dcb4-4180-93b3-47a83e8d1735"
+      ],
+      "recovery_options": [],
+      "schema_version": 1,
+      "stage": "intake",
+      "started_at": "2026-04-05T08:43:45.055600Z",
+      "status": "running",
+      "supersedes_stage_run_id": null,
+      "upstream_stage_run_ids": [],
+      "warning_ids": [
+        "f1c4f818-b9d0-4475-8854-f8af0df177be"
+      ]
+    }
+  },
+  "test_plans": {},
+  "user_decisions": {},
+  "warnings": {
+    "f1c4f818-b9d0-4475-8854-f8af0df177be": {
+      "branch_id": "3f88c6a7-3e99-490e-8e9a-261b44d18b75",
+      "code": "intake_recorded",
+      "created_at": "2026-04-05T08:43:45.056194Z",
+      "details": null,
+      "id": "f1c4f818-b9d0-4475-8854-f8af0df177be",
+      "investigation_id": "b9c02e31-3e31-4f57-ad26-2cfc44a0623d",
+      "message": "Investigation intake recorded.",
+      "mitigation": null,
+      "owner_ref": null,
+      "schema_version": 1,
+      "severity": "info",
+      "stage_run_id": "dda657a1-db07-4d08-a445-166dea222871",
+      "subject_ref": {
+        "entity_id": "dda657a1-db07-4d08-a445-166dea222871",
+        "entity_type": "stage_run",
+        "schema_version": 1
+      }
+    }
+  },
+  "workflow_version": "1.0"
+}
