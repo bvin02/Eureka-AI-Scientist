@@ -24,6 +24,7 @@ from domain.models import (
     ApprovalCheckpoint,
     ArtifactRef,
     Branch,
+    CaveatRecord,
     DatasetProfile,
     DatasetSource,
     EntityRef,
@@ -334,6 +335,139 @@ class WorkflowEngine:
             reason=f"User edit: {request.decision_action}",
         )
         return self.get_state(branch.investigation_id, branch.id)
+
+    async def edit_hypothesis(
+        self,
+        branch_id: UUID,
+        hypothesis_id: UUID,
+        actor_label: str,
+        user_instruction: str,
+    ) -> Hypothesis:
+        hypothesis = self.store.snapshot.hypotheses[hypothesis_id]
+        branch = self.store.snapshot.branches[branch_id]
+        if hypothesis.branch_id != branch_id:
+            raise RuntimeError("Hypothesis does not belong to the requested branch.")
+
+        stage_run = self._latest_effective_stage_run(branch_id, WorkflowStage.GENERATE_HYPOTHESES)
+        from llm.hypothesis_engine import HypothesisEngine
+        from orchestration.contracts import HypothesisProposal, HypothesisRewriteProposal
+
+        existing = HypothesisProposal(
+            label=hypothesis.label,
+            title=hypothesis.title or hypothesis.label,
+            thesis=hypothesis.thesis,
+            mechanism=hypothesis.mechanism,
+            required_variables=hypothesis.required_variables,
+            preferred_proxies=hypothesis.preferred_proxies,
+            recommended_test_type=None,
+            expected_direction=hypothesis.expected_direction,
+            target_assets=hypothesis.target_assets,
+            explanatory_variables=hypothesis.explanatory_variables,
+            likely_caveats=[item.detail for item in hypothesis.caveats],
+            confidence_level=hypothesis.confidence_level or 0.5,
+            novelty_usefulness_note=hypothesis.novelty_usefulness_note or "Edited hypothesis",
+        )
+        hypothesis_engine = getattr(self.model_adapter, "hypothesis_engine", HypothesisEngine())
+        rewrite: HypothesisRewriteProposal = await hypothesis_engine.rewrite(existing, user_instruction)
+
+        edited = Hypothesis(
+            investigation_id=hypothesis.investigation_id,
+            branch_id=branch_id,
+            research_question_id=hypothesis.research_question_id,
+            stage_run_id=stage_run.id,
+            label=hypothesis.label,
+            title=rewrite.title,
+            thesis=rewrite.thesis,
+            mechanism=rewrite.mechanism,
+            required_variables=rewrite.required_variables,
+            preferred_proxies=rewrite.preferred_proxies,
+            recommended_test_type=rewrite.recommended_test_type.value if rewrite.recommended_test_type is not None else hypothesis.recommended_test_type,
+            expected_direction=rewrite.expected_direction,
+            target_assets=hypothesis.target_assets,
+            explanatory_variables=rewrite.explanatory_variables,
+            confidence_level=rewrite.confidence_level,
+            novelty_usefulness_note=rewrite.novelty_usefulness_note,
+            caveats=[CaveatRecord(label="hypothesis_edit", detail=item) for item in rewrite.likely_caveats],
+            status=hypothesis.status,
+        )
+        self.store.put(edited)
+
+        decision = UserDecision(
+            investigation_id=branch.investigation_id,
+            branch_id=branch_id,
+            actor_label=actor_label,
+            decision_type=UserDecisionType.EDIT_HYPOTHESIS,
+            stage_run_id=stage_run.id,
+            rationale=user_instruction,
+            selected_refs=[
+                EntityRef(entity_type=EntityKind.HYPOTHESIS, entity_id=hypothesis.id),
+                EntityRef(entity_type=EntityKind.HYPOTHESIS, entity_id=edited.id),
+            ],
+            payload={"instruction": user_instruction},
+            affects_stage_run_ids=[stage_run.id],
+        )
+        self.store.put(decision)
+        self.notebook_service.append_decision_entry(
+            branch=branch,
+            decision=decision,
+            title=f"Hypothesis edited: {edited.title or edited.label}",
+            summary=user_instruction,
+            related_refs=[
+                EntityRef(entity_type=EntityKind.HYPOTHESIS, entity_id=hypothesis.id),
+                EntityRef(entity_type=EntityKind.HYPOTHESIS, entity_id=edited.id),
+            ],
+        )
+        hypothesis.status = hypothesis.status
+        self.store.put(hypothesis)
+        self.invalidate_downstream(
+            branch_id=branch_id,
+            anchor_stage=WorkflowStage.GENERATE_HYPOTHESES,
+            invalidated_by_stage_run_id=stage_run.id,
+            reason=f"Hypothesis edited: {edited.title or edited.label}",
+        )
+        return edited
+
+    def fork_from_hypothesis(
+        self,
+        source_branch_id: UUID,
+        hypothesis_id: UUID,
+        actor_label: str,
+        new_branch_name: str,
+        rationale: str | None = None,
+    ) -> WorkflowState:
+        hypothesis = self.store.snapshot.hypotheses[hypothesis_id]
+        if hypothesis.branch_id != source_branch_id:
+            raise RuntimeError("Hypothesis does not belong to the requested source branch.")
+
+        state = self.fork_branch(
+            BranchForkRequest(
+                source_branch_id=source_branch_id,
+                anchor_stage_run_id=hypothesis.stage_run_id,
+                actor_label=actor_label,
+                new_branch_name=new_branch_name,
+                rationale=rationale or f"Forked from hypothesis: {hypothesis.title or hypothesis.label}",
+            )
+        )
+        child_branch = self.store.snapshot.branches[state.current_branch_id]
+        decision = UserDecision(
+            investigation_id=child_branch.investigation_id,
+            branch_id=child_branch.id,
+            actor_label=actor_label,
+            decision_type=UserDecisionType.SELECT_HYPOTHESIS,
+            stage_run_id=hypothesis.stage_run_id,
+            rationale=rationale,
+            selected_refs=[EntityRef(entity_type=EntityKind.HYPOTHESIS, entity_id=hypothesis.id)],
+            payload={"fork_origin": "hypothesis_card"},
+        )
+        self.store.put(decision)
+        self.notebook_service.append_decision_entry(
+            branch=child_branch,
+            decision=decision,
+            title=f"Hypothesis selected: {hypothesis.title or hypothesis.label}",
+            summary=rationale or "Forked branch to pursue this hypothesis.",
+            related_refs=[EntityRef(entity_type=EntityKind.HYPOTHESIS, entity_id=hypothesis.id)],
+        )
+        return self.get_state(child_branch.investigation_id, child_branch.id)
 
     def fork_branch(self, request: BranchForkRequest) -> WorkflowState:
         source_branch = self.store.snapshot.branches[request.source_branch_id]
@@ -662,13 +796,18 @@ class WorkflowEngine:
                 research_question_id=question.id,
                 stage_run_id=stage_run.id,
                 label=proposal.label,
+                title=proposal.title,
                 thesis=proposal.thesis,
                 mechanism=proposal.mechanism,
+                required_variables=proposal.required_variables,
+                preferred_proxies=proposal.preferred_proxies,
+                recommended_test_type=proposal.recommended_test_type.value if proposal.recommended_test_type is not None else None,
                 expected_direction=proposal.expected_direction,
                 target_assets=proposal.target_assets,
                 explanatory_variables=proposal.explanatory_variables,
-                falsifiers=proposal.falsifiers,
-                priority_score=proposal.priority_score,
+                caveats=[CaveatRecord(label="hypothesis_caveat", detail=item) for item in proposal.likely_caveats],
+                confidence_level=proposal.confidence_level,
+                novelty_usefulness_note=proposal.novelty_usefulness_note,
             )
             self.store.put(hypothesis)
             refs.append(EntityRef(entity_type=EntityKind.HYPOTHESIS, entity_id=hypothesis.id))

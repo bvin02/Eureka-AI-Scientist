@@ -1,0 +1,41 @@
+{
+  "profiles": [
+    {
+      "columns": [],
+      "dataset_external_id": "DFII10",
+      "key_candidates": [
+        "date"
+      ],
+      "quality_flags": [
+        "deterministic_profile"
+      ],
+      "row_count": 120,
+      "schema_version": 1
+    },
+    {
+      "columns": [],
+      "dataset_external_id": "CPILFESL",
+      "key_candidates": [
+        "date"
+      ],
+      "quality_flags": [
+        "deterministic_profile"
+      ],
+      "row_count": 120,
+      "schema_version": 1
+    },
+    {
+      "columns": [],
+      "dataset_external_id": "SOXX",
+      "key_candidates": [
+        "date"
+      ],
+      "quality_flags": [
+        "deterministic_profile"
+      ],
+      "row_count": 120,
+      "schema_version": 1
+    }
+  ],
+  "schema_version": 1
+}

@@ -154,3 +154,47 @@ def test_failed_stage_exposes_recovery_options() -> None:
     failed_run = engine.store.latest_branch_stage_run(state.current_branch_id, WorkflowStage.PROPOSE_MERGE_PLAN)
     assert failed_run.status == StageRunStatus.FAILED
     assert failed_run.failure_message is not None
+
+
+def test_hypothesis_can_be_edited_and_invalidates_downstream() -> None:
+    engine = create_engine()
+    state = asyncio.run(engine.create_investigation("Demo", "Investigate semis versus defensives."))
+    asyncio.run(engine.run_next_stage(state.investigation_id, state.current_branch_id))
+    asyncio.run(engine.run_next_stage(state.investigation_id, state.current_branch_id))
+    asyncio.run(engine.run_next_stage(state.investigation_id, state.current_branch_id))
+
+    hypothesis_id = next(iter(engine.store.snapshot.hypotheses.values())).id
+    edited = asyncio.run(
+        engine.edit_hypothesis(
+            branch_id=state.current_branch_id,
+            hypothesis_id=hypothesis_id,
+            actor_label="analyst",
+            user_instruction="Rewrite this around semis versus defensives.",
+        )
+    )
+
+    assert edited.title is not None
+    assert edited.required_variables
+    branch_state = next(item for item in engine.get_state(state.investigation_id, state.current_branch_id).branch_states if item.branch_id == state.current_branch_id)
+    assert branch_state.next_stage == WorkflowStage.RETRIEVE_EVIDENCE
+
+
+def test_branch_can_fork_from_hypothesis_card() -> None:
+    engine = create_engine()
+    state = asyncio.run(engine.create_investigation("Demo", "Investigate semis versus defensives."))
+    asyncio.run(engine.run_next_stage(state.investigation_id, state.current_branch_id))
+    asyncio.run(engine.run_next_stage(state.investigation_id, state.current_branch_id))
+    asyncio.run(engine.run_next_stage(state.investigation_id, state.current_branch_id))
+
+    hypothesis = next(iter(engine.store.snapshot.hypotheses.values()))
+    child_state = engine.fork_from_hypothesis(
+        source_branch_id=state.current_branch_id,
+        hypothesis_id=hypothesis.id,
+        actor_label="analyst",
+        new_branch_name="hypothesis-branch",
+        rationale="Pursue this specific hypothesis path.",
+    )
+
+    child_branch = engine.store.snapshot.branches[child_state.current_branch_id]
+    assert child_branch.parent_branch_id == state.current_branch_id
+    assert child_state.current_stage == WorkflowStage.RETRIEVE_EVIDENCE

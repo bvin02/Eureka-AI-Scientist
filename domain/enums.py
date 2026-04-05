@@ -134,6 +134,7 @@ class ProvenanceSourceType(StrEnum):
 
 class UserDecisionType(StrEnum):
     SELECT_HYPOTHESIS = "select_hypothesis"
+    EDIT_HYPOTHESIS = "edit_hypothesis"
     APPROVE_MERGE_PLAN = "approve_merge_plan"
     OVERRIDE_MERGE_PLAN = "override_merge_plan"
     APPROVE_TEST_PLAN = "approve_test_plan"

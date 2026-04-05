@@ -256,13 +256,19 @@ class Hypothesis(ImmutableRecord):
     research_question_id: UUID
     stage_run_id: UUID
     label: str
+    title: str | None = None
     thesis: str
     mechanism: str
+    required_variables: list[str] = Field(default_factory=list)
+    preferred_proxies: list[str] = Field(default_factory=list)
+    recommended_test_type: str | None = None
     expected_direction: str | None = None
     target_assets: list[str] = Field(default_factory=list)
     explanatory_variables: list[str] = Field(default_factory=list)
     falsifiers: list[str] = Field(default_factory=list)
     priority_score: float | None = None
+    confidence_level: float | None = None
+    novelty_usefulness_note: str | None = None
     status: HypothesisStatus = HypothesisStatus.PROPOSED
     assumptions: list[AssumptionRecord] = Field(default_factory=list)
     caveats: list[CaveatRecord] = Field(default_factory=list)

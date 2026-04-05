@@ -5,6 +5,7 @@ from typing import Protocol
 from domain.enums import AnalysisType, MergeJoinType, TimeAlignmentPolicy
 from llm.client import OpenAIResponsesGateway
 from llm.contracts import PromptRequest
+from llm.hypothesis_engine import HypothesisEngine
 from llm.research_planner import ResearchPlanner, planner_output_to_research_question_plan
 from orchestration.contracts import (
     DatasetCandidate,
@@ -38,38 +39,28 @@ class WorkflowModelAdapter(Protocol):
 
 
 class DeterministicWorkflowModelAdapter:
-    def __init__(self, planner: ResearchPlanner | None = None) -> None:
+    def __init__(
+        self,
+        planner: ResearchPlanner | None = None,
+        hypothesis_engine: HypothesisEngine | None = None,
+    ) -> None:
         self.planner = planner or ResearchPlanner()
+        self.hypothesis_engine = hypothesis_engine or HypothesisEngine()
 
     async def parse_research_question(self, raw_prompt: str) -> ResearchQuestionPlan:
         planner_output = self.planner.fallback.plan(raw_prompt)
         return planner_output_to_research_question_plan(planner_output)
 
     async def generate_hypotheses(self, canonical_question: str) -> HypothesisProposalSet:
-        return HypothesisProposalSet(
-            hypotheses=[
-                HypothesisProposal(
-                    label="Primary thesis",
-                    thesis=canonical_question,
-                    mechanism="Macro and market variables transmit through rates and earnings expectations.",
-                    expected_direction="positive",
-                    target_assets=["SOXX", "XLK"],
-                    explanatory_variables=["real yields", "inflation"],
-                    falsifiers=["no relationship in forward returns", "unstable across regimes"],
-                    priority_score=0.9,
-                ),
-                HypothesisProposal(
-                    label="Defensive counterfactual",
-                    thesis="If the signal is weak, defensives should absorb flow instead of growth.",
-                    mechanism="Risk-off rotation dominates macro easing.",
-                    expected_direction="negative",
-                    target_assets=["XLP", "XLU"],
-                    explanatory_variables=["inflation surprises", "yield changes"],
-                    falsifiers=["growth outperforms despite falling yields"],
-                    priority_score=0.6,
-                ),
-            ]
+        research_question = ResearchQuestionPlan(
+            canonical_question=canonical_question,
+            market_universe=["macro", "equities"],
+            benchmark="SPY",
+            horizon="1-6 months",
+            frequency="monthly",
+            unit_of_analysis="time series",
         )
+        return await self.hypothesis_engine.generate(research_question)
 
     async def retrieve_evidence(self, canonical_question: str) -> EvidenceSummarySet:
         return EvidenceSummarySet(
@@ -208,6 +199,7 @@ class ResponsesWorkflowModelAdapter:
         self.gateway = gateway
         self.fallback = fallback or DeterministicWorkflowModelAdapter()
         self.planner = ResearchPlanner(gateway=gateway)
+        self.hypothesis_engine = HypothesisEngine(gateway=gateway)
 
     async def _generate(self, prompt_name: str, system_prompt: str, user_prompt: str, schema):
         if self.gateway.client is None:
@@ -224,13 +216,15 @@ class ResponsesWorkflowModelAdapter:
         return planner_output_to_research_question_plan(planner_output)
 
     async def generate_hypotheses(self, canonical_question: str) -> HypothesisProposalSet:
-        result = await self._generate(
-            "generate_hypotheses",
-            "Generate structured hypothesis cards for a quant research investigation.",
-            canonical_question,
-            HypothesisProposalSet,
+        research_question = ResearchQuestionPlan(
+            canonical_question=canonical_question,
+            market_universe=["macro", "equities"],
+            benchmark="SPY",
+            horizon="1-6 months",
+            frequency="monthly",
+            unit_of_analysis="time series",
         )
-        return result or await self.fallback.generate_hypotheses(canonical_question)
+        return await self.hypothesis_engine.generate(research_question)
 
     async def retrieve_evidence(self, canonical_question: str) -> EvidenceSummarySet:
         result = await self._generate(

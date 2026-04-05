@@ -1,0 +1,5 @@
+{
+  "analysis_type": "rolling_regression",
+  "dataset_id": "8fc59814-04ed-4349-9313-0a77949e01f1",
+  "objective": "Check whether sensitivity is regime-stable."
+}

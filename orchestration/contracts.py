@@ -19,13 +19,32 @@ class ResearchQuestionPlan(DomainModel):
 
 class HypothesisProposal(DomainModel):
     label: str
+    title: str
     thesis: str
     mechanism: str
+    required_variables: list[str] = Field(default_factory=list)
+    preferred_proxies: list[str] = Field(default_factory=list)
+    recommended_test_type: AnalysisType | None = None
     expected_direction: str | None = None
     target_assets: list[str] = Field(default_factory=list)
     explanatory_variables: list[str] = Field(default_factory=list)
-    falsifiers: list[str] = Field(default_factory=list)
-    priority_score: float | None = None
+    likely_caveats: list[str] = Field(default_factory=list)
+    confidence_level: float
+    novelty_usefulness_note: str
+
+
+class HypothesisRewriteProposal(DomainModel):
+    title: str
+    thesis: str
+    mechanism: str
+    required_variables: list[str] = Field(default_factory=list)
+    preferred_proxies: list[str] = Field(default_factory=list)
+    recommended_test_type: AnalysisType | None = None
+    expected_direction: str | None = None
+    explanatory_variables: list[str] = Field(default_factory=list)
+    likely_caveats: list[str] = Field(default_factory=list)
+    confidence_level: float
+    novelty_usefulness_note: str
 
 
 class HypothesisProposalSet(DomainModel):
