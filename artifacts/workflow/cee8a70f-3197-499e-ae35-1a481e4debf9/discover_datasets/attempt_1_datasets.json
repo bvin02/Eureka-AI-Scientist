@@ -1,0 +1,38 @@
+{
+  "datasets": [
+    {
+      "dataset_kind": "macro_series",
+      "description": "Proxy for 10-year real yields.",
+      "entity_grain": "market",
+      "external_id": "DFII10",
+      "frequency": "daily",
+      "name": "10Y Treasury Inflation-Indexed Security, Constant Maturity",
+      "provider": "fred",
+      "schema_version": 1,
+      "time_grain": "date"
+    },
+    {
+      "dataset_kind": "macro_series",
+      "description": "Core CPI index.",
+      "entity_grain": "market",
+      "external_id": "CPILFESL",
+      "frequency": "monthly",
+      "name": "Core CPI",
+      "provider": "fred",
+      "schema_version": 1,
+      "time_grain": "date"
+    },
+    {
+      "dataset_kind": "market_series",
+      "description": "Market price series for sector comparison.",
+      "entity_grain": "ticker",
+      "external_id": "SOXX",
+      "frequency": "daily",
+      "name": "SOXX prices",
+      "provider": "yahoo_finance",
+      "schema_version": 1,
+      "time_grain": "date"
+    }
+  ],
+  "schema_version": 1
+}

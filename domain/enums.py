@@ -1,4 +1,10 @@
-from enum import StrEnum
+from enum import Enum
+
+try:  # pragma: no cover - compatibility shim for Python <3.11
+    from enum import StrEnum
+except ImportError:  # pragma: no cover
+    class StrEnum(str, Enum):
+        pass
 
 
 class InvestigationStatus(StrEnum):

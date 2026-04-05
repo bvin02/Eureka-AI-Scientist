@@ -1,0 +1,5 @@
+{
+  "analysis_type": "linear_regression",
+  "dataset_id": "1e8c4768-16fd-4506-8714-e4e27fd4a9fd",
+  "objective": "Estimate directional sensitivity of forward returns."
+}

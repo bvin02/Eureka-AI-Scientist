@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from domain.enums import AnalysisType, EvidenceStance, MergeJoinType, TimeAlignmentPolicy
 from domain.models import CaveatRecord, ColumnProfile, DomainModel, TransformSpec
@@ -97,23 +97,73 @@ class DatasetProfileSet(DomainModel):
 
 
 class MergeMappingProposal(DomainModel):
-    left_column: str
-    right_column: str
+    source_dataset_external_id: str
+    source_column: str
+    target_column: str
     semantic_role: str
+    match_explanation: str
+    date_normalization_rule: str | None = None
+    frequency_rule: str | None = None
+    lag_rule: str | None = None
+    include_in_output: bool = True
+    drop_reason: str | None = None
+    leakage_risk: str | None = None
+    ambiguity_note: str | None = None
     transforms: list[TransformSpec] = Field(default_factory=list)
     confidence: float
     notes: str | None = None
 
 
+class MergeJoinEdgeProposal(DomainModel):
+    left_dataset_external_id: str
+    right_dataset_external_id: str
+    join_type: MergeJoinType
+    join_keys: list[str] = Field(default_factory=list)
+    left_time_column: str | None = None
+    right_time_column: str | None = None
+    confidence: float
+    rationale: str
+
+
+class MergeDatasetSelectionProposal(DomainModel):
+    dataset_external_id: str
+    role: str
+    reason: str
+    confidence: float
+
+
+class DroppedColumnProposal(DomainModel):
+    dataset_external_id: str
+    column: str
+    reason: str
+    confidence: float
+
+
 class MergePlanProposal(DomainModel):
     output_name: str
+    chosen_datasets: list[MergeDatasetSelectionProposal] = Field(default_factory=list)
+    join_graph: list[MergeJoinEdgeProposal] = Field(default_factory=list)
     join_type: MergeJoinType
     time_alignment_policy: TimeAlignmentPolicy
+    date_alignment_strategy: str
+    frequency_conversion_strategy: str
+    lag_policy: str
     lag_assumption: str
     mappings: list[MergeMappingProposal] = Field(default_factory=list)
+    dropped_columns: list[DroppedColumnProposal] = Field(default_factory=list)
+    unresolved_ambiguities: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
     ambiguity_notes: list[str] = Field(default_factory=list)
     validation_checks: list[str] = Field(default_factory=list)
     confidence: float
+
+    @model_validator(mode="after")
+    def validate_plan_has_join_graph(self) -> "MergePlanProposal":
+        if len(self.chosen_datasets) < 2:
+            raise ValueError("Merge plan must choose at least two datasets.")
+        if not self.join_graph:
+            raise ValueError("Merge plan must include at least one join edge.")
+        return self
 
 
 class AnalysisSpecProposal(DomainModel):

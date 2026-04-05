@@ -1,0 +1,10 @@
+{
+  "key_findings": [
+    "Analysis execution completed with placeholder metrics."
+  ],
+  "schema_version": 1,
+  "summary": "Deterministic summary placeholder for Investigate semis versus defensives.",
+  "warnings": [
+    "Replace deterministic stage adapter with live model- and data-backed execution for production."
+  ]
+}

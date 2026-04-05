@@ -341,13 +341,41 @@ class DatasetProfile(ImmutableRecord):
 class MergeMapping(ImmutableRecord):
     merge_plan_id: UUID
     stage_run_id: UUID
+    source_dataset_source_id: UUID | None = None
     left_column: str
     right_column: str
     semantic_role: str
+    semantic_match_explanation: str | None = None
+    date_normalization_rule: str | None = None
+    frequency_rule: str | None = None
+    lag_rule: str | None = None
+    include_in_output: bool = True
+    drop_reason: str | None = None
+    leakage_risk: str | None = None
+    ambiguity_note: str | None = None
+    user_overridden: bool = False
     transforms: list[TransformSpec] = Field(default_factory=list)
     confidence: float
     notes: str | None = None
     nullable_mismatch: bool = False
+
+
+class JoinEdge(DomainModel):
+    left_dataset_source_id: UUID
+    right_dataset_source_id: UUID
+    join_type: MergeJoinType
+    join_keys: list[str] = Field(default_factory=list)
+    left_time_column: str | None = None
+    right_time_column: str | None = None
+    confidence: float
+    rationale: str
+
+
+class DroppedColumn(DomainModel):
+    dataset_source_id: UUID
+    column: str
+    reason: str
+    confidence: float
 
 
 class MergePlan(ImmutableRecord):
@@ -357,10 +385,18 @@ class MergePlan(ImmutableRecord):
     left_dataset_source_id: UUID
     right_dataset_source_id: UUID
     output_name: str
+    chosen_dataset_source_ids: list[UUID] = Field(default_factory=list)
     join_type: MergeJoinType
+    join_graph: list[JoinEdge] = Field(default_factory=list)
     mappings: list[MergeMapping] = Field(default_factory=list)
     time_alignment_policy: TimeAlignmentPolicy
+    date_alignment_strategy: str | None = None
+    frequency_conversion_strategy: str | None = None
+    lag_policy: str | None = None
     lag_assumption: str
+    dropped_columns: list[DroppedColumn] = Field(default_factory=list)
+    unresolved_ambiguities: list[str] = Field(default_factory=list)
+    planner_warnings: list[str] = Field(default_factory=list)
     filters: list[str] = Field(default_factory=list)
     derived_transforms: list[TransformSpec] = Field(default_factory=list)
     validation_checks: list[str] = Field(default_factory=list)

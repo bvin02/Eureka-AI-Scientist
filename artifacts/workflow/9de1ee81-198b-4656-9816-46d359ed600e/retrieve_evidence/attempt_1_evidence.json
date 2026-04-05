@@ -1,0 +1,63 @@
+{
+  "evidence_items": [
+    {
+      "citation": "provenance:macro_real_rates_note",
+      "data_used": [
+        "real yields",
+        "equity returns"
+      ],
+      "date": "2025-10-01",
+      "evidence_stance": "supports",
+      "extracted_claims": [
+        "Real-rate moves can affect valuation-sensitive sectors more than the broad market."
+      ],
+      "methodology_summary": "Empirical macro-finance framing using historical yield and asset-return relationships.",
+      "provider": "public_research",
+      "relevance_to_hypothesis": "Directly relevant to Investigate whether need a merge plan..",
+      "schema_version": 1,
+      "short_claim_summary": "Falling real yields tend to support duration-sensitive equity segments, though the effect is regime-dependent.",
+      "source": "Federal Reserve research / macro commentary",
+      "title": "Real-rate sensitivity of long-duration assets"
+    },
+    {
+      "citation": "provenance:sector_rotation_regime_note",
+      "data_used": [
+        "sector ETF returns",
+        "inflation series",
+        "yield changes"
+      ],
+      "date": "2025-06-15",
+      "evidence_stance": "weakly_supports",
+      "extracted_claims": [
+        "Macro interpretation matters as much as the raw data direction."
+      ],
+      "methodology_summary": "Cross-market commentary supported by historical sector-relative performance comparisons.",
+      "provider": "public_research",
+      "relevance_to_hypothesis": "Useful counterweight because it highlights conditional interpretation rather than a one-way macro rule.",
+      "schema_version": 1,
+      "short_claim_summary": "Cooling inflation alone is often insufficient; growth-sensitive outperformance depends on whether the market reads the move as benign easing rather than growth deterioration.",
+      "source": "Sell-side or public market strategy research",
+      "title": "Sector rotation depends on growth expectations as well as inflation cooling"
+    },
+    {
+      "citation": "provenance:macro_event_study_reference",
+      "data_used": [
+        "macro release surprises",
+        "high-frequency or daily asset returns"
+      ],
+      "date": "2023-03-01",
+      "evidence_stance": "adjacent",
+      "extracted_claims": [
+        "Announcement effects are strongest when the surprise component is large."
+      ],
+      "methodology_summary": "Event-study style measurement around announcement dates.",
+      "provider": "paper",
+      "relevance_to_hypothesis": "Relevant if the hypothesis is framed around CPI prints, labor releases, or other event windows.",
+      "schema_version": 1,
+      "short_claim_summary": "Event-style reactions to macro releases exist, but persistence and sign can vary with the prevailing regime and expectations backdrop.",
+      "source": "Academic macro-finance literature",
+      "title": "Macro announcement effects are short horizon and noisy across regimes"
+    }
+  ],
+  "schema_version": 1
+}

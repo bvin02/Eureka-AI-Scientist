@@ -1,0 +1,9 @@
+{
+  "next_steps": [
+    "Fork branch to test alternative lag assumptions.",
+    "Run regime split on falling vs rising real-yield environments.",
+    "Expand evidence retrieval to filings or research notes."
+  ],
+  "schema_version": 1,
+  "summary": "Next steps for Investigate semis versus defensives."
+}

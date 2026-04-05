@@ -8,6 +8,7 @@ class PromptRegistry:
             "evidence_retrieval": Path("llm/prompts/evidence_retrieval.md"),
             "hypothesis_engine": Path("llm/prompts/hypothesis_engine.md"),
             "master": Path("prompts/prompt1_master.md"),
+            "merge_planner": Path("llm/prompts/merge_planner.md"),
             "scaffold": Path("prompts/prompt2_scaffold.md"),
             "research_planner": Path("llm/prompts/research_planner.md"),
         }

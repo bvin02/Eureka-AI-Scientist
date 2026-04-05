@@ -198,3 +198,48 @@ def test_branch_can_fork_from_hypothesis_card() -> None:
     child_branch = engine.store.snapshot.branches[child_state.current_branch_id]
     assert child_branch.parent_branch_id == state.current_branch_id
     assert child_state.current_stage == WorkflowStage.RETRIEVE_EVIDENCE
+
+
+def test_merge_plan_can_be_overridden_and_used_for_canonical_dataset_build() -> None:
+    engine = create_engine()
+    state = asyncio.run(engine.create_investigation("Demo", "Investigate semis versus defensives."))
+    blocked = asyncio.run(engine.run_until_blocked(state.investigation_id, state.current_branch_id))
+    merge_plan = next(
+        item for item in engine.store.snapshot.merge_plans.values() if item.branch_id == state.current_branch_id
+    )
+    first_mapping = merge_plan.mappings[0]
+    edited = engine.edit_merge_plan(
+        branch_id=state.current_branch_id,
+        merge_plan_id=merge_plan.id,
+        actor_label="analyst",
+        mapping_overrides=[
+            {
+                "source_dataset_source_id": str(first_mapping.source_dataset_source_id),
+                "source_column": first_mapping.left_column,
+                "target_column": "aligned_timestamp",
+                "semantic_role": "time_key",
+                "include_in_output": True,
+            }
+        ],
+        lag_policy_override="Apply one-period lag for macro features before merge.",
+        rationale="Manual override for review.",
+    )
+    assert edited.id != merge_plan.id
+    assert any(item.user_overridden for item in edited.mappings)
+
+    branch_state = next(item for item in blocked.state.branch_states if item.branch_id == state.current_branch_id)
+    approved_state = engine.resolve_approval(
+        ApprovalResolution(
+            checkpoint_id=branch_state.pending_approval_checkpoint_id,
+            status=ApprovalStatus.APPROVED,
+            actor_label="analyst",
+            rationale="Approve edited merge plan.",
+        )
+    )
+    approved_merge_plan = next(
+        item
+        for item in engine.store.snapshot.merge_plans.values()
+        if item.branch_id == approved_state.current_branch_id and item.approved_by_checkpoint_id is not None
+    )
+    assert approved_merge_plan.id == edited.id
+    assert approved_merge_plan.lag_policy == "Apply one-period lag for macro features before merge."

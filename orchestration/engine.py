@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from domain.enums import (
     AnalysisDatasetKind,
@@ -31,8 +31,10 @@ from domain.models import (
     EvidenceSource,
     Hypothesis,
     Investigation,
+    JoinEdge,
     MergeMapping,
     MergePlan,
+    DroppedColumn,
     NotebookEntry,
     ProvenanceRecord,
     ReproducibilityMetadata,
@@ -47,8 +49,10 @@ from domain.models import (
 )
 from infra.artifact_store import LocalArtifactStore
 from infra.settings import get_settings
+from llm.merge_planner import MergePlannerDatasetProfile, MergePlannerInput
 from notebook.service import NotebookService
 from orchestration.fingerprints import fingerprint
+from orchestration.contracts import ResearchQuestionPlan
 from orchestration.model_adapter import DeterministicWorkflowModelAdapter, WorkflowModelAdapter
 from orchestration.models import (
     ApprovalResolution,
@@ -426,6 +430,130 @@ class WorkflowEngine:
             reason=f"Hypothesis edited: {edited.title or edited.label}",
         )
         return edited
+
+    def edit_merge_plan(
+        self,
+        branch_id: UUID,
+        merge_plan_id: UUID,
+        actor_label: str,
+        mapping_overrides: list[dict[str, Any]] | None = None,
+        join_overrides: list[dict[str, Any]] | None = None,
+        lag_policy_override: str | None = None,
+        rationale: str | None = None,
+    ) -> MergePlan:
+        merge_plan = self.store.snapshot.merge_plans[merge_plan_id]
+        branch = self.store.snapshot.branches[branch_id]
+        if merge_plan.branch_id != branch_id:
+            raise RuntimeError("Merge plan does not belong to the requested branch.")
+
+        stage_run = self._latest_effective_stage_run(branch_id, WorkflowStage.PROPOSE_MERGE_PLAN)
+        override_map = {
+            (item.get("source_dataset_source_id"), item.get("source_column")): item
+            for item in (mapping_overrides or [])
+        }
+        updated_mappings: list[MergeMapping] = []
+        for mapping in merge_plan.mappings:
+            key = (str(mapping.source_dataset_source_id) if mapping.source_dataset_source_id else None, mapping.left_column)
+            override = override_map.get(key)
+            if override is None:
+                updated_mappings.append(mapping)
+                continue
+            updated_mappings.append(
+                mapping.model_copy(
+                    update={
+                        "semantic_role": override.get("semantic_role", mapping.semantic_role),
+                        "right_column": override.get("target_column", mapping.right_column),
+                        "confidence": float(override.get("confidence", mapping.confidence)),
+                        "notes": override.get("notes", mapping.notes),
+                        "include_in_output": bool(override.get("include_in_output", mapping.include_in_output)),
+                        "drop_reason": override.get("drop_reason", mapping.drop_reason),
+                        "lag_rule": override.get("lag_rule", mapping.lag_rule),
+                        "frequency_rule": override.get("frequency_rule", mapping.frequency_rule),
+                        "date_normalization_rule": override.get("date_normalization_rule", mapping.date_normalization_rule),
+                        "user_overridden": True,
+                    }
+                )
+            )
+
+        updated_join_graph = merge_plan.join_graph
+        if join_overrides:
+            updated_join_graph = []
+            for item in join_overrides:
+                updated_join_graph.append(
+                    JoinEdge(
+                        left_dataset_source_id=UUID(item["left_dataset_source_id"]),
+                        right_dataset_source_id=UUID(item["right_dataset_source_id"]),
+                        join_type=item.get("join_type", merge_plan.join_type),
+                        join_keys=item.get("join_keys", []),
+                        left_time_column=item.get("left_time_column"),
+                        right_time_column=item.get("right_time_column"),
+                        confidence=float(item.get("confidence", merge_plan.confidence)),
+                        rationale=item.get("rationale", "User override"),
+                    )
+                )
+
+        edited_plan = merge_plan.model_copy(
+            update={
+                "id": uuid4(),
+                "created_at": utc_now(),
+                "mappings": updated_mappings,
+                "join_graph": updated_join_graph,
+                "lag_policy": lag_policy_override or merge_plan.lag_policy,
+                "lag_assumption": lag_policy_override or merge_plan.lag_assumption,
+                "approved_by_checkpoint_id": None,
+                "confidence": min(merge_plan.confidence, 0.9),
+            },
+            deep=True,
+        )
+        self.store.put(edited_plan)
+        for checkpoint in self.store.snapshot.approval_checkpoints.values():
+            if (
+                checkpoint.branch_id == branch_id
+                and checkpoint.stage == WorkflowStage.AWAIT_USER_MERGE_APPROVAL
+                and checkpoint.status == ApprovalStatus.PENDING
+            ):
+                checkpoint.subject_refs = [EntityRef(entity_type=EntityKind.MERGE_PLAN, entity_id=edited_plan.id)]
+                self.store.put(checkpoint)
+
+        decision_payload = {
+            "merge_plan_id": str(merge_plan.id),
+            "edited_merge_plan_id": str(edited_plan.id),
+            "mapping_overrides": mapping_overrides or [],
+            "join_overrides": join_overrides or [],
+            "lag_policy_override": lag_policy_override,
+        }
+        decision = UserDecision(
+            investigation_id=branch.investigation_id,
+            branch_id=branch_id,
+            actor_label=actor_label,
+            decision_type=UserDecisionType.OVERRIDE_MERGE_PLAN,
+            stage_run_id=stage_run.id,
+            rationale=rationale,
+            payload=decision_payload,
+            selected_refs=[
+                EntityRef(entity_type=EntityKind.MERGE_PLAN, entity_id=merge_plan.id),
+                EntityRef(entity_type=EntityKind.MERGE_PLAN, entity_id=edited_plan.id),
+            ],
+            affects_stage_run_ids=[stage_run.id],
+        )
+        self.store.put(decision)
+        self.notebook_service.append_decision_entry(
+            branch=branch,
+            decision=decision,
+            title="Merge plan overridden by user",
+            summary=rationale or "User adjusted mapping/join rules before approval.",
+            related_refs=[
+                EntityRef(entity_type=EntityKind.MERGE_PLAN, entity_id=merge_plan.id),
+                EntityRef(entity_type=EntityKind.MERGE_PLAN, entity_id=edited_plan.id),
+            ],
+        )
+        self.invalidate_downstream(
+            branch_id=branch_id,
+            anchor_stage=WorkflowStage.PROPOSE_MERGE_PLAN,
+            invalidated_by_stage_run_id=stage_run.id,
+            reason="Merge plan overrides changed downstream dataset build assumptions.",
+        )
+        return edited_plan
 
     def fork_from_hypothesis(
         self,
@@ -963,37 +1091,120 @@ class WorkflowEngine:
 
     async def _handle_propose_merge_plan(self, branch: Branch, stage_run: StageRun) -> StageExecutionResult:
         datasets = self._entities_from_stage(branch.id, WorkflowStage.DISCOVER_DATASETS, DatasetSource)
+        profiles = self._entities_from_stage(branch.id, WorkflowStage.PROFILE_DATASETS, DatasetProfile)
+        question = self._entity_from_stage(branch.id, WorkflowStage.PARSE_RESEARCH_QUESTION, ResearchQuestion)
+        hypotheses = self._entities_from_stage(branch.id, WorkflowStage.GENERATE_HYPOTHESES, Hypothesis)
+        prior_test_plans = [item for item in self.store.snapshot.test_plans.values() if item.branch_id == branch.id]
         if len(datasets) < 2:
             raise StageFailure(
                 "At least two datasets are required to propose a merge plan.",
                 recovery_options=[RecoveryOption(action="edit_prompt", label="Add another dataset", description="Discover more datasets before merge planning.", target_stage=WorkflowStage.DISCOVER_DATASETS)],
             )
-        proposal = await self.model_adapter.propose_merge_plan([dataset.external_id for dataset in datasets])
+        dataset_by_id = {item.id: item for item in datasets}
+        profile_by_dataset_id = {item.dataset_source_id: item for item in profiles}
+        planner_profiles: list[MergePlannerDatasetProfile] = []
+        for source in datasets:
+            profile = profile_by_dataset_id.get(source.id)
+            profile_columns = [item.name for item in (profile.columns if profile else [])]
+            if not profile_columns:
+                profile_columns = ["date", "value"]
+                if source.provider == "yahoo_finance":
+                    profile_columns = ["date", "symbol", "adjusted_close", "volume"]
+                if source.provider == "sec_edgar":
+                    profile_columns = ["filing_date", "accession_number", "cik"]
+            planner_profiles.append(
+                MergePlannerDatasetProfile(
+                    dataset_external_id=source.external_id,
+                    dataset_name=source.name,
+                    provider=source.provider,
+                    dataset_kind=source.dataset_kind,
+                    frequency=source.frequency,
+                    columns=profile_columns,
+                    key_candidates=profile.key_candidates if profile else [],
+                    quality_flags=profile.quality_flags if profile else [],
+                )
+            )
+        planner_input = MergePlannerInput(
+            research_question=self._research_question_to_plan(question),
+            hypotheses=[item.thesis for item in hypotheses],
+            requested_tests=[analysis.analysis_type.value for plan in prior_test_plans for analysis in plan.analyses],
+            dataset_profiles=planner_profiles,
+        )
+        proposal = await self.model_adapter.propose_merge_plan(planner_input)
+        source_id_by_external = {item.external_id: item.id for item in datasets}
         mappings = [
             MergeMapping(
                 merge_plan_id=UUID(int=0),
                 stage_run_id=stage_run.id,
-                left_column=item.left_column,
-                right_column=item.right_column,
+                source_dataset_source_id=source_id_by_external.get(item.source_dataset_external_id),
+                left_column=item.source_column,
+                right_column=item.target_column,
                 semantic_role=item.semantic_role,
+                semantic_match_explanation=item.match_explanation,
+                date_normalization_rule=item.date_normalization_rule,
+                frequency_rule=item.frequency_rule,
+                lag_rule=item.lag_rule,
+                include_in_output=item.include_in_output,
+                drop_reason=item.drop_reason,
+                leakage_risk=item.leakage_risk,
+                ambiguity_note=item.ambiguity_note,
                 transforms=item.transforms,
                 confidence=item.confidence,
                 notes=item.notes,
             )
             for item in proposal.mappings
         ]
+        selected_ids = [
+            source_id_by_external[item.dataset_external_id]
+            for item in proposal.chosen_datasets
+            if item.dataset_external_id in source_id_by_external
+        ]
+        if len(selected_ids) < 2:
+            selected_ids = [item.id for item in datasets[:2]]
+        join_graph = [
+            JoinEdge(
+                left_dataset_source_id=source_id_by_external[item.left_dataset_external_id],
+                right_dataset_source_id=source_id_by_external[item.right_dataset_external_id],
+                join_type=item.join_type,
+                join_keys=item.join_keys,
+                left_time_column=item.left_time_column,
+                right_time_column=item.right_time_column,
+                confidence=item.confidence,
+                rationale=item.rationale,
+            )
+            for item in proposal.join_graph
+            if item.left_dataset_external_id in source_id_by_external
+            and item.right_dataset_external_id in source_id_by_external
+        ]
         merge_plan = MergePlan(
             investigation_id=branch.investigation_id,
             branch_id=branch.id,
             stage_run_id=stage_run.id,
-            left_dataset_source_id=datasets[0].id,
-            right_dataset_source_id=datasets[1].id,
+            left_dataset_source_id=selected_ids[0],
+            right_dataset_source_id=selected_ids[1],
             output_name=proposal.output_name,
+            chosen_dataset_source_ids=selected_ids,
             join_type=proposal.join_type,
+            join_graph=join_graph,
             mappings=[],
             time_alignment_policy=proposal.time_alignment_policy,
+            date_alignment_strategy=proposal.date_alignment_strategy,
+            frequency_conversion_strategy=proposal.frequency_conversion_strategy,
+            lag_policy=proposal.lag_policy,
             lag_assumption=proposal.lag_assumption,
+            dropped_columns=[
+                DroppedColumn(
+                    dataset_source_id=source_id_by_external[item.dataset_external_id],
+                    column=item.column,
+                    reason=item.reason,
+                    confidence=item.confidence,
+                )
+                for item in proposal.dropped_columns
+                if item.dataset_external_id in source_id_by_external
+            ],
             validation_checks=proposal.validation_checks,
+            unresolved_ambiguities=proposal.unresolved_ambiguities,
+            planner_warnings=proposal.warnings,
             ambiguity_notes=proposal.ambiguity_notes,
             confidence=proposal.confidence,
         )
@@ -1064,6 +1275,12 @@ class WorkflowEngine:
 
     async def _handle_build_canonical_dataset(self, branch: Branch, stage_run: StageRun) -> StageExecutionResult:
         merge_plan = self._approved_merge_plan(branch.id)
+        included_mappings = [item for item in merge_plan.mappings if item.include_in_output]
+        time_mappings = [item for item in included_mappings if item.semantic_role == "time_key"]
+        entity_mappings = [item for item in included_mappings if item.semantic_role == "entity_key"]
+        measure_mappings = [item for item in included_mappings if item.semantic_role == "measure"]
+        attribute_mappings = [item for item in included_mappings if item.semantic_role == "attribute"]
+        inferred_frequency = "monthly" if "monthly" in (merge_plan.frequency_conversion_strategy or "").lower() else "daily"
         dataset = AnalysisDataset(
             investigation_id=branch.investigation_id,
             branch_id=branch.id,
@@ -1072,24 +1289,37 @@ class WorkflowEngine:
             dataset_kind=AnalysisDatasetKind.CANONICAL,
             name=merge_plan.output_name,
             grain="date",
-            frequency="monthly",
-            feature_columns=["real_yield_change", "core_cpi_change"],
-            target_columns=["forward_return"],
-            identifier_columns=["date"],
-            time_column="date",
-            upstream_dataset_source_ids=[merge_plan.left_dataset_source_id, merge_plan.right_dataset_source_id],
+            frequency=inferred_frequency,
+            feature_columns=[item.right_column for item in measure_mappings + attribute_mappings],
+            target_columns=[item.right_column for item in measure_mappings[:1]] or ["target_measure"],
+            identifier_columns=[item.right_column for item in entity_mappings] or ["entity_id"],
+            time_column=time_mappings[0].right_column if time_mappings else "timestamp",
+            upstream_dataset_source_ids=merge_plan.chosen_dataset_source_ids or [merge_plan.left_dataset_source_id, merge_plan.right_dataset_source_id],
         )
         artifact = self._write_json_artifact(
             branch,
             stage_run,
             ArtifactKind.DATASET_FILE,
             "canonical_dataset",
-            {"dataset_name": dataset.name, "kind": dataset.dataset_kind.value},
+            {
+                "dataset_name": dataset.name,
+                "kind": dataset.dataset_kind.value,
+                "merge_plan_id": str(merge_plan.id),
+                "join_graph": [edge.model_dump(mode="json") for edge in merge_plan.join_graph],
+                "included_mappings": [item.model_dump(mode="json") for item in included_mappings],
+                "dropped_columns": [item.model_dump(mode="json") for item in merge_plan.dropped_columns],
+                "date_alignment_strategy": merge_plan.date_alignment_strategy,
+                "frequency_conversion_strategy": merge_plan.frequency_conversion_strategy,
+                "lag_policy": merge_plan.lag_policy,
+            },
         )
         dataset.materialized_artifact_ref_id = artifact.id
         self.store.put(artifact)
         self.store.put(dataset)
-        warning = self._create_warning(branch, stage_run, "canonical_dataset_built", "Canonical dataset materialized with lag-aware assumptions.", WarningSeverity.INFO)
+        warning_text = "Canonical dataset materialized from approved merge plan."
+        if merge_plan.planner_warnings:
+            warning_text += f" Planner warnings: {'; '.join(merge_plan.planner_warnings[:2])}."
+        warning = self._create_warning(branch, stage_run, "canonical_dataset_built", warning_text, WarningSeverity.INFO)
         provenance = self._create_provenance(branch, stage_run, EntityRef(entity_type=EntityKind.ANALYSIS_DATASET, entity_id=dataset.id), ProvenanceSourceType.SYSTEM, "build_canonical_dataset", None)
         for record in [warning, provenance]:
             self.store.put(record)
@@ -1385,6 +1615,18 @@ class WorkflowEngine:
                 recovery_options=[RecoveryOption(action="resolve_merge_approval", label="Resolve merge approval", description="Approve the merge plan before continuing.", target_stage=WorkflowStage.AWAIT_USER_MERGE_APPROVAL)],
             )
         return merge_plan
+
+    def _research_question_to_plan(self, question: ResearchQuestion) -> ResearchQuestionPlan:
+        return ResearchQuestionPlan(
+            canonical_question=question.canonical_question,
+            market_universe=question.market_universe,
+            benchmark=question.benchmark,
+            horizon=question.horizon,
+            frequency=question.frequency,
+            unit_of_analysis=question.unit_of_analysis,
+            success_criteria=question.success_criteria,
+            caveats=question.caveats,
+        )
 
     def _entity_from_stage(self, branch_id: UUID, stage: WorkflowStage, expected_type: type[Any]) -> Any:
         entities = self._entities_from_stage(branch_id, stage, expected_type)

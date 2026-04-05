@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-5.4"
     openai_api_key: str | None = None
     fred_api_key: str | None = None
+    sec_user_agent: str = "Eureka/0.1 research@eureka.local"
     database_url: str = "sqlite:///./eureka.db"
     artifacts_dir: Path = Path("./artifacts")
     log_level: str = "INFO"

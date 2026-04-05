@@ -7,6 +7,7 @@ def test_prompt_registry_exposes_expected_prompts() -> None:
         "evidence_retrieval",
         "hypothesis_engine",
         "master",
+        "merge_planner",
         "research_planner",
         "scaffold",
     ]

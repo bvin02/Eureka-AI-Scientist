@@ -1,0 +1,16 @@
+{
+  "datasets": [
+    {
+      "dataset_kind": "macro_series",
+      "description": "Only one dataset for Investigate whether need a merge plan.",
+      "entity_grain": "market",
+      "external_id": "DFII10",
+      "frequency": "daily",
+      "name": "10Y Real Yield",
+      "provider": "fred",
+      "schema_version": 1,
+      "time_grain": "date"
+    }
+  ],
+  "schema_version": 1
+}

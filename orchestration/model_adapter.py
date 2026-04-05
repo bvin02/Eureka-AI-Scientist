@@ -2,22 +2,20 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from domain.enums import AnalysisType, MergeJoinType, TimeAlignmentPolicy
+from domain.enums import AnalysisType
 from llm.client import OpenAIResponsesGateway
 from llm.contracts import PromptRequest
 from llm.evidence_retrieval import EvidenceInput, EvidenceRetriever
 from llm.hypothesis_engine import HypothesisEngine
+from llm.merge_planner import MergePlanner, MergePlannerInput
 from llm.research_planner import ResearchPlanner, planner_output_to_research_question_plan
 from orchestration.contracts import (
     DatasetCandidate,
     DatasetDiscoverySet,
     DatasetProfileProposal,
     DatasetProfileSet,
-    EvidenceItemProposal,
     EvidenceSummarySet,
-    HypothesisProposal,
     HypothesisProposalSet,
-    MergeMappingProposal,
     MergePlanProposal,
     NextStepProposal,
     ResearchQuestionPlan,
@@ -33,7 +31,7 @@ class WorkflowModelAdapter(Protocol):
     async def retrieve_evidence(self, canonical_question: str) -> EvidenceSummarySet: ...
     async def discover_datasets(self, canonical_question: str) -> DatasetDiscoverySet: ...
     async def profile_datasets(self, dataset_names: list[str]) -> DatasetProfileSet: ...
-    async def propose_merge_plan(self, dataset_names: list[str]) -> MergePlanProposal: ...
+    async def propose_merge_plan(self, planner_input: MergePlannerInput) -> MergePlanProposal: ...
     async def propose_test_plan(self, question: str) -> TestPlanProposal: ...
     async def summarize_results(self, question: str) -> ResultSummaryProposal: ...
     async def propose_next_steps(self, question: str) -> NextStepProposal: ...
@@ -45,10 +43,12 @@ class DeterministicWorkflowModelAdapter:
         planner: ResearchPlanner | None = None,
         hypothesis_engine: HypothesisEngine | None = None,
         evidence_retriever: EvidenceRetriever | None = None,
+        merge_planner: MergePlanner | None = None,
     ) -> None:
         self.planner = planner or ResearchPlanner()
         self.hypothesis_engine = hypothesis_engine or HypothesisEngine()
         self.evidence_retriever = evidence_retriever or EvidenceRetriever()
+        self.merge_planner = merge_planner or MergePlanner()
 
     async def parse_research_question(self, raw_prompt: str) -> ResearchQuestionPlan:
         planner_output = self.planner.fallback.plan(raw_prompt)
@@ -121,27 +121,8 @@ class DeterministicWorkflowModelAdapter:
             )
         return DatasetProfileSet(profiles=profiles)
 
-    async def propose_merge_plan(self, dataset_names: list[str]) -> MergePlanProposal:
-        left_name = dataset_names[0]
-        right_name = dataset_names[1] if len(dataset_names) > 1 else dataset_names[0]
-        return MergePlanProposal(
-            output_name="canonical_macro_market_dataset",
-            join_type=MergeJoinType.ASOF,
-            time_alignment_policy=TimeAlignmentPolicy.PUBLICATION_LAG,
-            lag_assumption="Macro series are aligned to first tradable date after release availability.",
-            mappings=[
-                MergeMappingProposal(
-                    left_column="date",
-                    right_column="date",
-                    semantic_role="time_key",
-                    confidence=0.95,
-                    notes=f"Join {left_name} to {right_name} on date with lag-aware alignment.",
-                )
-            ],
-            ambiguity_notes=["Daily market data and slower macro releases require explicit lag handling."],
-            validation_checks=["no_lookahead", "coverage_overlap"],
-            confidence=0.84,
-        )
+    async def propose_merge_plan(self, planner_input: MergePlannerInput) -> MergePlanProposal:
+        return self.merge_planner.fallback.plan(planner_input)
 
     async def propose_test_plan(self, question: str) -> TestPlanProposal:
         return TestPlanProposal(
@@ -196,6 +177,7 @@ class ResponsesWorkflowModelAdapter:
         self.planner = ResearchPlanner(gateway=gateway)
         self.hypothesis_engine = HypothesisEngine(gateway=gateway)
         self.evidence_retriever = EvidenceRetriever(gateway=gateway)
+        self.merge_planner = MergePlanner(gateway=gateway)
 
     async def _generate(self, prompt_name: str, system_prompt: str, user_prompt: str, schema):
         if self.gateway.client is None:
@@ -245,14 +227,8 @@ class ResponsesWorkflowModelAdapter:
         )
         return result or await self.fallback.profile_datasets(dataset_names)
 
-    async def propose_merge_plan(self, dataset_names: list[str]) -> MergePlanProposal:
-        result = await self._generate(
-            "propose_merge_plan",
-            "Generate a structured merge plan for the provided datasets.",
-            ", ".join(dataset_names),
-            MergePlanProposal,
-        )
-        return result or await self.fallback.propose_merge_plan(dataset_names)
+    async def propose_merge_plan(self, planner_input: MergePlannerInput) -> MergePlanProposal:
+        return await self.merge_planner.plan(planner_input)
 
     async def propose_test_plan(self, question: str) -> TestPlanProposal:
         result = await self._generate(

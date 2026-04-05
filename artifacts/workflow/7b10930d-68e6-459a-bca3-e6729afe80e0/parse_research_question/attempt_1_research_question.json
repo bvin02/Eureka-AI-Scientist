@@ -1,0 +1,24 @@
+{
+  "benchmark": "SPY",
+  "canonical_question": "Investigate semis versus defensives.",
+  "caveats": [
+    {
+      "created_at": "2026-04-05T09:12:09.159542Z",
+      "detail": "Correlation may reflect broader macro regime shifts rather than a clean causal effect.",
+      "id": "ca1f9e40-d0a9-4216-933c-db23e251ca57",
+      "label": "planner_caveat",
+      "schema_version": 1,
+      "severity": "warning"
+    }
+  ],
+  "frequency": "monthly",
+  "horizon": "1-6 months",
+  "market_universe": [
+    "semiconductors"
+  ],
+  "schema_version": 1,
+  "success_criteria": [
+    "Use a lag-aware monthly core specification with regression and rolling/regime diagnostics."
+  ],
+  "unit_of_analysis": "time series"
+}
