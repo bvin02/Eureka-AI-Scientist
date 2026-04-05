@@ -1,7 +1,10 @@
 import asyncio
 
 from domain.enums import ApprovalStatus, StageRunStatus, WorkflowStage
+from data.models import AdapterFetchResult, CanonicalDataset, CanonicalDatasetMetadata, CanonicalObservation, ProvenancePayload
+from domain.models import TimeCoverage
 from orchestration.contracts import DatasetCandidate, DatasetDiscoverySet
+import orchestration.engine as engine_module
 from orchestration.engine import WorkflowEngine
 from orchestration.model_adapter import DeterministicWorkflowModelAdapter
 from orchestration.models import ApprovalResolution, BranchForkRequest, UserEditRequest
@@ -243,3 +246,43 @@ def test_merge_plan_can_be_overridden_and_used_for_canonical_dataset_build() -> 
     )
     assert approved_merge_plan.id == edited.id
     assert approved_merge_plan.lag_policy == "Apply one-period lag for macro features before merge."
+
+
+def test_canonical_dataset_build_emits_preview_quality_and_provenance_bundle(monkeypatch) -> None:
+    class _StubAdapter:
+        async def fetch(self, external_id: str, **kwargs):
+            dataset = CanonicalDataset(
+                metadata=CanonicalDatasetMetadata(
+                    provider="stub",
+                    external_id=external_id,
+                    name=f"dataset-{external_id}",
+                    description="stub dataset",
+                    dataset_kind="stub",
+                    coverage=TimeCoverage(),
+                    provenance=ProvenancePayload(provider="stub", endpoint="fetch"),
+                ),
+                observations=[
+                    CanonicalObservation(date="2024-01-01", value=1.0),
+                    CanonicalObservation(date="2024-01-02", value=2.0),
+                ],
+            )
+            return AdapterFetchResult(dataset=dataset)
+
+    class _StubRegistry:
+        def get(self, name: str):
+            return _StubAdapter()
+
+    monkeypatch.setattr(engine_module, "AdapterRegistry", lambda: _StubRegistry())
+
+    engine = create_engine()
+    state = asyncio.run(engine.create_investigation("Demo", "Investigate semis versus defensives."))
+    blocked = asyncio.run(engine.run_until_blocked(state.investigation_id, state.current_branch_id))
+    checkpoint_id = next(
+        item for item in blocked.state.branch_states if item.branch_id == state.current_branch_id
+    ).pending_approval_checkpoint_id
+    approved = engine.resolve_approval(
+        ApprovalResolution(checkpoint_id=checkpoint_id, status=ApprovalStatus.APPROVED, actor_label="analyst")
+    )
+    stage_run, _ = asyncio.run(engine.run_next_stage(approved.investigation_id, approved.current_branch_id))
+    assert stage_run.stage == WorkflowStage.BUILD_CANONICAL_DATASET
+    assert len(stage_run.artifact_ref_ids) == 4

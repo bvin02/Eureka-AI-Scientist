@@ -166,6 +166,26 @@ class MergePlanProposal(DomainModel):
         return self
 
 
+class CanonicalBuildInput(DomainModel):
+    approved_merge_plan: MergePlanProposal | None = None
+    selected_hypothesis: str
+    canonical_frequency: str
+    source_dataset_external_ids: list[str] = Field(default_factory=list)
+    validation_requirements: list[str] = Field(default_factory=list)
+
+
+class CanonicalBuildPlanProposal(DomainModel):
+    dataset_name: str
+    selected_hypothesis_summary: str
+    timestamp_normalization: str
+    lag_policy: str
+    frequency_alignment: str
+    derived_fields: list[TransformSpec] = Field(default_factory=list)
+    leakage_checks: list[str] = Field(default_factory=list)
+    quality_checks: list[str] = Field(default_factory=list)
+    notes: list[str] = Field(default_factory=list)
+
+
 class AnalysisSpecProposal(DomainModel):
     analysis_type: AnalysisType
     title: str

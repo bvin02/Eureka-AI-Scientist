@@ -5,6 +5,7 @@ class PromptRegistry:
     def __init__(self, root: Path | None = None) -> None:
         self.root = root or Path.cwd()
         self._prompts = {
+            "canonical_dataset_builder": Path("llm/prompts/canonical_dataset_builder.md"),
             "evidence_retrieval": Path("llm/prompts/evidence_retrieval.md"),
             "hypothesis_engine": Path("llm/prompts/hypothesis_engine.md"),
             "master": Path("prompts/prompt1_master.md"),

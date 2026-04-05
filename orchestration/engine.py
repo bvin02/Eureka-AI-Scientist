@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid4
@@ -49,10 +49,11 @@ from domain.models import (
 )
 from infra.artifact_store import LocalArtifactStore
 from infra.settings import get_settings
+from data.adapters.registry import AdapterRegistry
 from llm.merge_planner import MergePlannerDatasetProfile, MergePlannerInput
 from notebook.service import NotebookService
 from orchestration.fingerprints import fingerprint
-from orchestration.contracts import ResearchQuestionPlan
+from orchestration.contracts import CanonicalBuildInput, MergePlanProposal, ResearchQuestionPlan
 from orchestration.model_adapter import DeterministicWorkflowModelAdapter, WorkflowModelAdapter
 from orchestration.models import (
     ApprovalResolution,
@@ -1275,12 +1276,45 @@ class WorkflowEngine:
 
     async def _handle_build_canonical_dataset(self, branch: Branch, stage_run: StageRun) -> StageExecutionResult:
         merge_plan = self._approved_merge_plan(branch.id)
+        hypotheses = self._entities_from_stage(branch.id, WorkflowStage.GENERATE_HYPOTHESES, Hypothesis)
+        selected_hypothesis = self._select_hypothesis_for_canonical(hypotheses)
         included_mappings = [item for item in merge_plan.mappings if item.include_in_output]
+        build_plan = await self.model_adapter.plan_canonical_dataset_build(
+            CanonicalBuildInput(
+                approved_merge_plan=self._merge_plan_to_proposal(merge_plan),
+                selected_hypothesis=selected_hypothesis.thesis if selected_hypothesis else "No explicit hypothesis selected.",
+                canonical_frequency="monthly" if "monthly" in (merge_plan.frequency_conversion_strategy or "").lower() else "daily",
+                source_dataset_external_ids=[
+                    self.store.snapshot.dataset_sources[source_id].external_id
+                    for source_id in (merge_plan.chosen_dataset_source_ids or [merge_plan.left_dataset_source_id, merge_plan.right_dataset_source_id])
+                    if source_id in self.store.snapshot.dataset_sources
+                ],
+                validation_requirements=merge_plan.validation_checks,
+            )
+        )
+        mapped_rows, fetch_provenance, build_warnings, quality_report = await self._materialize_canonical_rows(
+            branch=branch,
+            stage_run=stage_run,
+            merge_plan=merge_plan,
+            build_plan=build_plan,
+        )
+        if not mapped_rows:
+            raise StageFailure(
+                "Canonical dataset build produced zero rows after merge/alignment.",
+                recovery_options=[
+                    RecoveryOption(
+                        action="edit_merge_plan",
+                        label="Adjust merge mappings",
+                        description="Review join keys, lag policy, and source mappings to recover rows.",
+                        target_stage=WorkflowStage.PROPOSE_MERGE_PLAN,
+                    )
+                ],
+            )
         time_mappings = [item for item in included_mappings if item.semantic_role == "time_key"]
         entity_mappings = [item for item in included_mappings if item.semantic_role == "entity_key"]
         measure_mappings = [item for item in included_mappings if item.semantic_role == "measure"]
         attribute_mappings = [item for item in included_mappings if item.semantic_role == "attribute"]
-        inferred_frequency = "monthly" if "monthly" in (merge_plan.frequency_conversion_strategy or "").lower() else "daily"
+        inferred_frequency = "monthly" if "monthly" in (build_plan.frequency_alignment or "").lower() else "daily"
         dataset = AnalysisDataset(
             investigation_id=branch.investigation_id,
             branch_id=branch.id,
@@ -1295,6 +1329,7 @@ class WorkflowEngine:
             identifier_columns=[item.right_column for item in entity_mappings] or ["entity_id"],
             time_column=time_mappings[0].right_column if time_mappings else "timestamp",
             upstream_dataset_source_ids=merge_plan.chosen_dataset_source_ids or [merge_plan.left_dataset_source_id, merge_plan.right_dataset_source_id],
+            row_count=len(mapped_rows),
         )
         artifact = self._write_json_artifact(
             branch,
@@ -1305,31 +1340,93 @@ class WorkflowEngine:
                 "dataset_name": dataset.name,
                 "kind": dataset.dataset_kind.value,
                 "merge_plan_id": str(merge_plan.id),
+                "selected_hypothesis_id": str(selected_hypothesis.id) if selected_hypothesis else None,
                 "join_graph": [edge.model_dump(mode="json") for edge in merge_plan.join_graph],
                 "included_mappings": [item.model_dump(mode="json") for item in included_mappings],
                 "dropped_columns": [item.model_dump(mode="json") for item in merge_plan.dropped_columns],
-                "date_alignment_strategy": merge_plan.date_alignment_strategy,
-                "frequency_conversion_strategy": merge_plan.frequency_conversion_strategy,
-                "lag_policy": merge_plan.lag_policy,
+                "date_alignment_strategy": build_plan.timestamp_normalization,
+                "frequency_conversion_strategy": build_plan.frequency_alignment,
+                "lag_policy": build_plan.lag_policy,
+                "derived_fields": [item.model_dump(mode="json") for item in build_plan.derived_fields],
+                "rows": mapped_rows,
+            },
+        )
+        preview_artifact = self._write_json_artifact(
+            branch,
+            stage_run,
+            ArtifactKind.DATASET_PREVIEW,
+            "canonical_dataset_preview",
+            {"dataset_name": dataset.name, "row_count": len(mapped_rows), "rows": mapped_rows[:25]},
+        )
+        quality_artifact = self._write_json_artifact(
+            branch,
+            stage_run,
+            ArtifactKind.REPORT,
+            "canonical_dataset_quality_report",
+            quality_report,
+        )
+        provenance_bundle_artifact = self._write_json_artifact(
+            branch,
+            stage_run,
+            ArtifactKind.LOG,
+            "canonical_dataset_provenance_bundle",
+            {
+                "dataset_name": dataset.name,
+                "selected_hypothesis": selected_hypothesis.model_dump(mode="json") if selected_hypothesis else None,
+                "fetch_provenance": fetch_provenance,
+                "build_plan": build_plan.model_dump(mode="json"),
+                "quality_report_summary": quality_report,
             },
         )
         dataset.materialized_artifact_ref_id = artifact.id
-        self.store.put(artifact)
+        for artifact_ref in [artifact, preview_artifact, quality_artifact, provenance_bundle_artifact]:
+            self.store.put(artifact_ref)
         self.store.put(dataset)
         warning_text = "Canonical dataset materialized from approved merge plan."
         if merge_plan.planner_warnings:
             warning_text += f" Planner warnings: {'; '.join(merge_plan.planner_warnings[:2])}."
+        if build_warnings:
+            warning_text += f" Build warnings: {'; '.join(build_warnings[:2])}."
         warning = self._create_warning(branch, stage_run, "canonical_dataset_built", warning_text, WarningSeverity.INFO)
-        provenance = self._create_provenance(branch, stage_run, EntityRef(entity_type=EntityKind.ANALYSIS_DATASET, entity_id=dataset.id), ProvenanceSourceType.SYSTEM, "build_canonical_dataset", None)
-        for record in [warning, provenance]:
+        system_provenance = self._create_provenance(
+            branch,
+            stage_run,
+            EntityRef(entity_type=EntityKind.ANALYSIS_DATASET, entity_id=dataset.id),
+            ProvenanceSourceType.SYSTEM,
+            "build_canonical_dataset",
+            None,
+        )
+        planning_provenance = self._create_provenance(
+            branch,
+            stage_run,
+            EntityRef(entity_type=EntityKind.ANALYSIS_DATASET, entity_id=dataset.id),
+            ProvenanceSourceType.LLM,
+            "canonical_dataset_builder_plan",
+            None,
+            prompt_name="canonical_dataset_builder",
+            prompt_version="v1",
+        )
+        for record in [warning, system_provenance, planning_provenance]:
             self.store.put(record)
+        provenance_ids = [system_provenance.id, planning_provenance.id]
+        for record in fetch_provenance:
+            provenance = self._create_provenance(
+                branch=branch,
+                stage_run=stage_run,
+                subject_ref=EntityRef(entity_type=EntityKind.ANALYSIS_DATASET, entity_id=dataset.id),
+                source_type=ProvenanceSourceType.DATA_API,
+                source_label=record["source_label"],
+                source_uri=record.get("source_uri"),
+            )
+            self.store.put(provenance)
+            provenance_ids.append(provenance.id)
         return StageExecutionResult(
             title="Canonical Dataset Built",
             summary=f"Built canonical dataset `{dataset.name}`.",
             related_refs=[EntityRef(entity_type=EntityKind.ANALYSIS_DATASET, entity_id=dataset.id)],
             warning_ids=[warning.id],
-            provenance_ids=[provenance.id],
-            artifact_ref_ids=[artifact.id],
+            provenance_ids=provenance_ids,
+            artifact_ref_ids=[artifact.id, preview_artifact.id, quality_artifact.id, provenance_bundle_artifact.id],
         )
 
     async def _handle_propose_test_plan(self, branch: Branch, stage_run: StageRun) -> StageExecutionResult:
@@ -1661,6 +1758,290 @@ class WorkflowEngine:
             if value is not None and isinstance(value, expected_type):
                 values.append(value)
         return values
+
+    def _select_hypothesis_for_canonical(self, hypotheses: list[Hypothesis]) -> Hypothesis | None:
+        if not hypotheses:
+            return None
+        selected = [item for item in hypotheses if item.status.value == "selected"]
+        pool = selected or hypotheses
+        return sorted(
+            pool,
+            key=lambda item: (item.priority_score or 0.0, item.confidence_level or 0.0),
+            reverse=True,
+        )[0]
+
+    def _merge_plan_to_proposal(self, merge_plan: MergePlan) -> MergePlanProposal:
+        return MergePlanProposal(
+            output_name=merge_plan.output_name,
+            chosen_datasets=[
+                {
+                    "dataset_external_id": self.store.snapshot.dataset_sources[source_id].external_id,
+                    "role": "selected",
+                    "reason": "Approved merge-plan dataset.",
+                    "confidence": merge_plan.confidence,
+                }
+                for source_id in (merge_plan.chosen_dataset_source_ids or [merge_plan.left_dataset_source_id, merge_plan.right_dataset_source_id])
+                if source_id in self.store.snapshot.dataset_sources
+            ],
+            join_graph=[
+                {
+                    "left_dataset_external_id": self.store.snapshot.dataset_sources[edge.left_dataset_source_id].external_id,
+                    "right_dataset_external_id": self.store.snapshot.dataset_sources[edge.right_dataset_source_id].external_id,
+                    "join_type": edge.join_type.value,
+                    "join_keys": edge.join_keys,
+                    "left_time_column": edge.left_time_column,
+                    "right_time_column": edge.right_time_column,
+                    "confidence": edge.confidence,
+                    "rationale": edge.rationale,
+                }
+                for edge in merge_plan.join_graph
+                if edge.left_dataset_source_id in self.store.snapshot.dataset_sources
+                and edge.right_dataset_source_id in self.store.snapshot.dataset_sources
+            ],
+            join_type=merge_plan.join_type,
+            time_alignment_policy=merge_plan.time_alignment_policy,
+            date_alignment_strategy=merge_plan.date_alignment_strategy or "",
+            frequency_conversion_strategy=merge_plan.frequency_conversion_strategy or "",
+            lag_policy=merge_plan.lag_policy or merge_plan.lag_assumption,
+            lag_assumption=merge_plan.lag_assumption,
+            mappings=[
+                {
+                    "source_dataset_external_id": self.store.snapshot.dataset_sources[item.source_dataset_source_id].external_id
+                    if item.source_dataset_source_id in self.store.snapshot.dataset_sources
+                    else "unknown",
+                    "source_column": item.left_column,
+                    "target_column": item.right_column,
+                    "semantic_role": item.semantic_role,
+                    "match_explanation": item.semantic_match_explanation or "Approved mapping.",
+                    "date_normalization_rule": item.date_normalization_rule,
+                    "frequency_rule": item.frequency_rule,
+                    "lag_rule": item.lag_rule,
+                    "include_in_output": item.include_in_output,
+                    "drop_reason": item.drop_reason,
+                    "leakage_risk": item.leakage_risk,
+                    "ambiguity_note": item.ambiguity_note,
+                    "transforms": [transform.model_dump(mode="json") for transform in item.transforms],
+                    "confidence": item.confidence,
+                    "notes": item.notes,
+                }
+                for item in merge_plan.mappings
+            ],
+            dropped_columns=[
+                {
+                    "dataset_external_id": self.store.snapshot.dataset_sources[item.dataset_source_id].external_id,
+                    "column": item.column,
+                    "reason": item.reason,
+                    "confidence": item.confidence,
+                }
+                for item in merge_plan.dropped_columns
+                if item.dataset_source_id in self.store.snapshot.dataset_sources
+            ],
+            unresolved_ambiguities=merge_plan.unresolved_ambiguities,
+            warnings=merge_plan.planner_warnings,
+            ambiguity_notes=merge_plan.ambiguity_notes,
+            validation_checks=merge_plan.validation_checks,
+            confidence=merge_plan.confidence,
+        )
+
+    async def _materialize_canonical_rows(
+        self,
+        branch: Branch,
+        stage_run: StageRun,
+        merge_plan: MergePlan,
+        build_plan: Any,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, str]], list[str], dict[str, Any]]:
+        source_ids = merge_plan.chosen_dataset_source_ids or [merge_plan.left_dataset_source_id, merge_plan.right_dataset_source_id]
+        source_records = [self.store.snapshot.dataset_sources[item] for item in source_ids if item in self.store.snapshot.dataset_sources]
+        registry = AdapterRegistry()
+        source_rows: dict[UUID, list[dict[str, Any]]] = {}
+        fetch_provenance: list[dict[str, str]] = []
+        build_warnings: list[str] = []
+        for source in source_records:
+            adapter = registry.get(source.provider)
+            try:
+                result = await adapter.fetch(source.external_id)
+                rows = self._rows_from_fetch_result(result)
+                source_rows[source.id] = rows
+                if not rows:
+                    build_warnings.append(f"No rows fetched for {source.provider}:{source.external_id}.")
+                fetch_provenance.append({"source_label": f"{source.provider}:{source.external_id}", "source_uri": source.source_url or ""})
+            except Exception as exc:
+                build_warnings.append(f"Fetch failed for {source.provider}:{source.external_id} ({exc}).")
+                source_rows[source.id] = []
+        if not source_rows:
+            return [], fetch_provenance, build_warnings, {"row_count": 0, "error": "no_sources_loaded"}
+
+        mapped_by_source = {source_id: self._apply_mapping_bundle(rows, merge_plan, source_id) for source_id, rows in source_rows.items()}
+        base_source_id = source_ids[0]
+        joined_rows = mapped_by_source.get(base_source_id, [])
+        for edge in merge_plan.join_graph:
+            if edge.left_dataset_source_id != base_source_id:
+                continue
+            right_rows = mapped_by_source.get(edge.right_dataset_source_id, [])
+            joined_rows = self._join_rows(joined_rows, right_rows, edge.join_keys, edge.join_type.value)
+        normalized_rows = [self._normalize_row_time(item, build_plan.timestamp_normalization) for item in joined_rows]
+        lagged_rows = [self._apply_row_lag(item, build_plan.lag_policy) for item in normalized_rows]
+        aligned_rows = self._align_frequency(lagged_rows, build_plan.frequency_alignment)
+        enriched_rows = self._apply_derived_fields(aligned_rows, build_plan.derived_fields)
+        if not enriched_rows:
+            enriched_rows = [self._placeholder_row_from_mappings(merge_plan)]
+            build_warnings.append("Fell back to placeholder canonical row because raw fetch/join returned no rows.")
+        quality_report = self._build_quality_report(enriched_rows, merge_plan, build_plan)
+        return enriched_rows, fetch_provenance, build_warnings, quality_report
+
+    def _rows_from_fetch_result(self, result: Any) -> list[dict[str, Any]]:
+        if result.dataset is not None:
+            rows = []
+            for observation in result.dataset.observations:
+                row = observation.model_dump(mode="json", exclude_none=True)
+                extra = row.pop("extra_fields", {}) or {}
+                row.update(extra)
+                rows.append(row)
+            return rows
+        if result.filing is not None:
+            filing = result.filing
+            return [{"accession_number": filing.accession_number, "form": filing.form, "filing_date": filing.filing_date.isoformat(), "cik": filing.cik}]
+        return []
+
+    def _apply_mapping_bundle(self, rows: list[dict[str, Any]], merge_plan: MergePlan, source_id: UUID) -> list[dict[str, Any]]:
+        mappings = [item for item in merge_plan.mappings if item.include_in_output and item.source_dataset_source_id == source_id]
+        output: list[dict[str, Any]] = []
+        for row in rows:
+            updated = dict(row)
+            for mapping in mappings:
+                if mapping.left_column in row:
+                    updated[mapping.right_column] = row.get(mapping.left_column)
+            output.append(updated)
+        return output
+
+    def _join_rows(self, left_rows: list[dict[str, Any]], right_rows: list[dict[str, Any]], join_keys: list[str], join_type: str) -> list[dict[str, Any]]:
+        if not left_rows:
+            return []
+        if not right_rows:
+            return left_rows if join_type in {"left", "asof"} else []
+        time_keys = [item for item in join_keys if "date" in item.lower() or "time" in item.lower()]
+        entity_keys = [item for item in join_keys if item not in time_keys]
+        right_index: dict[tuple[Any, ...], list[dict[str, Any]]] = {}
+        for row in right_rows:
+            key = tuple(row.get(item) for item in entity_keys)
+            right_index.setdefault(key, []).append(row)
+        for values in right_index.values():
+            values.sort(key=lambda item: self._row_date(item, time_keys[0] if time_keys else None) or date.min)
+        output: list[dict[str, Any]] = []
+        for left in left_rows:
+            key = tuple(left.get(item) for item in entity_keys)
+            candidates = right_index.get(key, [])
+            selected: dict[str, Any] | None = None
+            if join_type == "asof" and time_keys:
+                left_time = self._row_date(left, time_keys[0])
+                if left_time is not None:
+                    prior = [item for item in candidates if (self._row_date(item, time_keys[0]) or date.min) <= left_time]
+                    selected = prior[-1] if prior else None
+            elif time_keys:
+                selected = next((item for item in candidates if self._row_date(item, time_keys[0]) == self._row_date(left, time_keys[0])), None)
+            elif candidates:
+                selected = candidates[0]
+            if selected is None and join_type == "inner":
+                continue
+            merged = dict(left)
+            if selected is not None:
+                for col, value in selected.items():
+                    merged.setdefault(col, value)
+            output.append(merged)
+        return output
+
+    def _row_date(self, row: dict[str, Any], key: str | None) -> date | None:
+        value = row.get(key) if key else row.get("date") or row.get("timestamp")
+        if value is None:
+            return None
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return value
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00")).date()
+        except ValueError:
+            return None
+
+    def _normalize_row_time(self, row: dict[str, Any], _rule: str) -> dict[str, Any]:
+        normalized = dict(row)
+        for key in ["timestamp", "date", "filing_date"]:
+            parsed = self._row_date(normalized, key)
+            if parsed is not None:
+                normalized["timestamp"] = parsed.isoformat()
+                break
+        return normalized
+
+    def _apply_row_lag(self, row: dict[str, Any], lag_policy: str) -> dict[str, Any]:
+        if "lag" not in lag_policy.lower():
+            return row
+        timestamp = row.get("timestamp")
+        if timestamp is None:
+            return row
+        try:
+            lagged = datetime.fromisoformat(str(timestamp)).date() + timedelta(days=1)
+        except ValueError:
+            return row
+        output = dict(row)
+        output["timestamp"] = lagged.isoformat()
+        return output
+
+    def _align_frequency(self, rows: list[dict[str, Any]], frequency_alignment: str) -> list[dict[str, Any]]:
+        if "monthly" not in frequency_alignment.lower():
+            return rows
+        by_month: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            timestamp = row.get("timestamp") or row.get("date")
+            if timestamp is None:
+                continue
+            by_month[str(timestamp)[:7]] = row
+        return [by_month[item] for item in sorted(by_month.keys())]
+
+    def _apply_derived_fields(self, rows: list[dict[str, Any]], derived_fields: list[TransformSpec]) -> list[dict[str, Any]]:
+        if not derived_fields:
+            return rows
+        output = [dict(item) for item in rows]
+        for transform in derived_fields:
+            if not transform.source_columns:
+                continue
+            source_col = transform.source_columns[0]
+            for row in output:
+                value = row.get(source_col)
+                if value is None:
+                    continue
+                target_col = str(transform.parameters.get("target_column", f"{source_col}_{transform.operation}"))
+                if transform.operation == "copy":
+                    row[target_col] = value
+                if transform.operation == "scale" and isinstance(value, (int, float)):
+                    factor = float(transform.parameters.get("factor", 1.0))
+                    row[target_col] = float(value) * factor
+        return output
+
+    def _build_quality_report(self, rows: list[dict[str, Any]], merge_plan: MergePlan, build_plan: Any) -> dict[str, Any]:
+        columns = sorted({key for row in rows for key in row.keys()})
+        null_fraction = {
+            column: (sum(1 for row in rows if row.get(column) is None) / len(rows)) if rows else 1.0
+            for column in columns
+        }
+        return {
+            "row_count": len(rows),
+            "column_count": len(columns),
+            "columns": columns,
+            "null_fraction_by_column": null_fraction,
+            "leakage_warnings": [item.leakage_risk for item in merge_plan.mappings if item.leakage_risk],
+            "checks_requested": {"leakage": list(build_plan.leakage_checks), "quality": list(build_plan.quality_checks)},
+        }
+
+    def _placeholder_row_from_mappings(self, merge_plan: MergePlan) -> dict[str, Any]:
+        row: dict[str, Any] = {"timestamp": utc_now().date().isoformat()}
+        for mapping in merge_plan.mappings:
+            if not mapping.include_in_output:
+                continue
+            if mapping.semantic_role == "time_key":
+                row[mapping.right_column] = row["timestamp"]
+            elif mapping.semantic_role == "entity_key":
+                row[mapping.right_column] = "placeholder_entity"
+            else:
+                row[mapping.right_column] = 0.0
+        return row
 
     def _write_json_artifact(
         self,

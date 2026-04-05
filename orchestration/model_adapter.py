@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Protocol
 
 from domain.enums import AnalysisType
+from llm.canonical_dataset_builder import CanonicalDatasetBuilder
 from llm.client import OpenAIResponsesGateway
 from llm.contracts import PromptRequest
 from llm.evidence_retrieval import EvidenceInput, EvidenceRetriever
@@ -22,6 +23,8 @@ from orchestration.contracts import (
     ResultSummaryProposal,
     TestPlanProposal,
     AnalysisSpecProposal,
+    CanonicalBuildInput,
+    CanonicalBuildPlanProposal,
 )
 
 
@@ -32,6 +35,7 @@ class WorkflowModelAdapter(Protocol):
     async def discover_datasets(self, canonical_question: str) -> DatasetDiscoverySet: ...
     async def profile_datasets(self, dataset_names: list[str]) -> DatasetProfileSet: ...
     async def propose_merge_plan(self, planner_input: MergePlannerInput) -> MergePlanProposal: ...
+    async def plan_canonical_dataset_build(self, build_input: CanonicalBuildInput) -> CanonicalBuildPlanProposal: ...
     async def propose_test_plan(self, question: str) -> TestPlanProposal: ...
     async def summarize_results(self, question: str) -> ResultSummaryProposal: ...
     async def propose_next_steps(self, question: str) -> NextStepProposal: ...
@@ -49,6 +53,7 @@ class DeterministicWorkflowModelAdapter:
         self.hypothesis_engine = hypothesis_engine or HypothesisEngine()
         self.evidence_retriever = evidence_retriever or EvidenceRetriever()
         self.merge_planner = merge_planner or MergePlanner()
+        self.canonical_builder = CanonicalDatasetBuilder()
 
     async def parse_research_question(self, raw_prompt: str) -> ResearchQuestionPlan:
         planner_output = self.planner.fallback.plan(raw_prompt)
@@ -124,6 +129,9 @@ class DeterministicWorkflowModelAdapter:
     async def propose_merge_plan(self, planner_input: MergePlannerInput) -> MergePlanProposal:
         return self.merge_planner.fallback.plan(planner_input)
 
+    async def plan_canonical_dataset_build(self, build_input: CanonicalBuildInput) -> CanonicalBuildPlanProposal:
+        return self.canonical_builder.fallback.build_plan(build_input)
+
     async def propose_test_plan(self, question: str) -> TestPlanProposal:
         return TestPlanProposal(
             title="Base macro-market test plan",
@@ -178,6 +186,7 @@ class ResponsesWorkflowModelAdapter:
         self.hypothesis_engine = HypothesisEngine(gateway=gateway)
         self.evidence_retriever = EvidenceRetriever(gateway=gateway)
         self.merge_planner = MergePlanner(gateway=gateway)
+        self.canonical_builder = CanonicalDatasetBuilder(gateway=gateway)
 
     async def _generate(self, prompt_name: str, system_prompt: str, user_prompt: str, schema):
         if self.gateway.client is None:
@@ -229,6 +238,9 @@ class ResponsesWorkflowModelAdapter:
 
     async def propose_merge_plan(self, planner_input: MergePlannerInput) -> MergePlanProposal:
         return await self.merge_planner.plan(planner_input)
+
+    async def plan_canonical_dataset_build(self, build_input: CanonicalBuildInput) -> CanonicalBuildPlanProposal:
+        return await self.canonical_builder.build_plan(build_input)
 
     async def propose_test_plan(self, question: str) -> TestPlanProposal:
         result = await self._generate(
